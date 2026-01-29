@@ -15,8 +15,9 @@ from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import slugify
 
-from .const import CONF_ALBUM_ID, CONF_ALBUM_NAME, DOMAIN
+from .const import CONF_ALBUM_ID, CONF_ALBUM_NAME, CONF_HUB_NAME, DOMAIN
 from .coordinator import AlbumData, ImmichAlbumWatcherCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -66,7 +67,9 @@ class ImmichAlbumThumbnailCamera(
         self._subentry = subentry
         self._album_id = subentry.data[CONF_ALBUM_ID]
         self._album_name = subentry.data.get(CONF_ALBUM_NAME, "Unknown Album")
-        self._attr_unique_id = f"{subentry.subentry_id}_thumbnail"
+        self._hub_name = entry.data.get(CONF_HUB_NAME, "Immich")
+        unique_id_prefix = slugify(f"{self._hub_name}_album_{self._album_name}")
+        self._attr_unique_id = f"{unique_id_prefix}_thumbnail"
         self._cached_image: bytes | None = None
         self._last_thumbnail_id: str | None = None
 

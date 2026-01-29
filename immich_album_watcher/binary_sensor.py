@@ -15,12 +15,14 @@ from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import slugify
 
 from .const import (
     ATTR_ALBUM_ID,
     ATTR_ALBUM_NAME,
     CONF_ALBUM_ID,
     CONF_ALBUM_NAME,
+    CONF_HUB_NAME,
     DOMAIN,
     NEW_ASSETS_RESET_DELAY,
 )
@@ -71,7 +73,9 @@ class ImmichAlbumNewAssetsSensor(
         self._subentry = subentry
         self._album_id = subentry.data[CONF_ALBUM_ID]
         self._album_name = subentry.data.get(CONF_ALBUM_NAME, "Unknown Album")
-        self._attr_unique_id = f"{subentry.subentry_id}_new_assets"
+        self._hub_name = entry.data.get(CONF_HUB_NAME, "Immich")
+        unique_id_prefix = slugify(f"{self._hub_name}_album_{self._album_name}")
+        self._attr_unique_id = f"{unique_id_prefix}_new_assets"
 
     @property
     def _album_data(self) -> AlbumData | None:

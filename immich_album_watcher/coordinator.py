@@ -29,6 +29,7 @@ from .const import (
     ATTR_ASSET_TYPE,
     ATTR_ASSET_URL,
     ATTR_CHANGE_TYPE,
+    ATTR_HUB_NAME,
     ATTR_PEOPLE,
     ATTR_REMOVED_ASSETS,
     ATTR_REMOVED_COUNT,
@@ -217,6 +218,7 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
         album_id: str,
         album_name: str,
         scan_interval: int,
+        hub_name: str = "Immich",
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -229,6 +231,7 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
         self._api_key = api_key
         self._album_id = album_id
         self._album_name = album_name
+        self._hub_name = hub_name
         self._previous_state: AlbumData | None = None
         self._session: aiohttp.ClientSession | None = None
         self._people_cache: dict[str, str] = {}  # person_id -> name
@@ -542,6 +545,7 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
             added_assets_detail.append(asset_detail)
 
         event_data = {
+            ATTR_HUB_NAME: self._hub_name,
             ATTR_ALBUM_ID: change.album_id,
             ATTR_ALBUM_NAME: change.album_name,
             ATTR_CHANGE_TYPE: change.change_type,

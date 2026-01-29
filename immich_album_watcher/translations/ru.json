@@ -51,10 +51,12 @@
                 "title": "Подключение к Immich",
                 "description": "Введите данные вашего сервера Immich. API-ключ можно получить в Immich → Настройки пользователя → API-ключи.",
                 "data": {
+                    "hub_name": "Название хаба",
                     "immich_url": "URL Immich",
                     "api_key": "API-ключ"
                 },
                 "data_description": {
+                    "hub_name": "Название для этого сервера Immich (используется в ID сущностей)",
                     "immich_url": "URL вашего сервера Immich (например, http://192.168.1.100:2283)",
                     "api_key": "Ваш API-ключ Immich"
                 }

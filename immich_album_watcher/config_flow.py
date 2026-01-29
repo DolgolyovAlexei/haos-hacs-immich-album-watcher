@@ -23,6 +23,7 @@ from .const import (
     CONF_ALBUM_ID,
     CONF_ALBUM_NAME,
     CONF_API_KEY,
+    CONF_HUB_NAME,
     CONF_IMMICH_URL,
     CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
@@ -92,6 +93,7 @@ class ImmichAlbumWatcherConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            hub_name = user_input[CONF_HUB_NAME].strip()
             self._url = user_input[CONF_IMMICH_URL].rstrip("/")
             self._api_key = user_input[CONF_API_KEY]
 
@@ -105,8 +107,9 @@ class ImmichAlbumWatcherConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
 
                 return self.async_create_entry(
-                    title="Immich Album Watcher",
+                    title=hub_name,
                     data={
+                        CONF_HUB_NAME: hub_name,
                         CONF_IMMICH_URL: self._url,
                         CONF_API_KEY: self._api_key,
                     },
@@ -129,6 +132,7 @@ class ImmichAlbumWatcherConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
+                    vol.Required(CONF_HUB_NAME, default="Immich"): str,
                     vol.Required(CONF_IMMICH_URL): str,
                     vol.Required(CONF_API_KEY): str,
                 }

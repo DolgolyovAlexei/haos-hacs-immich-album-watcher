@@ -6,6 +6,7 @@ from typing import Final
 DOMAIN: Final = "immich_album_watcher"
 
 # Configuration keys
+CONF_HUB_NAME: Final = "hub_name"
 CONF_IMMICH_URL: Final = "immich_url"
 CONF_API_KEY: Final = "api_key"
 CONF_ALBUMS: Final = "albums"
@@ -26,6 +27,7 @@ EVENT_ASSETS_ADDED: Final = f"{DOMAIN}_assets_added"
 EVENT_ASSETS_REMOVED: Final = f"{DOMAIN}_assets_removed"
 
 # Attributes
+ATTR_HUB_NAME: Final = "hub_name"
 ATTR_ALBUM_ID: Final = "album_id"
 ATTR_ALBUM_NAME: Final = "album_name"
 ATTR_ALBUM_URL: Final = "album_url"

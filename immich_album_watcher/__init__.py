@@ -12,6 +12,7 @@ from .const import (
     CONF_ALBUM_ID,
     CONF_ALBUM_NAME,
     CONF_API_KEY,
+    CONF_HUB_NAME,
     CONF_IMMICH_URL,
     CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
@@ -27,6 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 class ImmichHubData:
     """Data for the Immich hub."""
 
+    name: str
     url: str
     api_key: str
     scan_interval: int
@@ -48,12 +50,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ImmichConfigEntry) -> bo
     """Set up Immich Album Watcher hub from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
+    hub_name = entry.data.get(CONF_HUB_NAME, "Immich")
     url = entry.data[CONF_IMMICH_URL]
     api_key = entry.data[CONF_API_KEY]
     scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
 
     # Store hub data
     entry.runtime_data = ImmichHubData(
+        name=hub_name,
         url=url,
         api_key=api_key,
         scan_interval=scan_interval,
@@ -104,6 +108,7 @@ async def _async_setup_subentry_coordinator(
         album_id=album_id,
         album_name=album_name,
         scan_interval=hub_data.scan_interval,
+        hub_name=hub_data.name,
     )
 
     # Fetch initial data

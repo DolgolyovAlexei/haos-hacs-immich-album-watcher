@@ -20,6 +20,7 @@ from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import slugify
 
 from .const import (
     ATTR_ALBUM_ID,
@@ -36,6 +37,7 @@ from .const import (
     ATTR_VIDEO_COUNT,
     CONF_ALBUM_ID,
     CONF_ALBUM_NAME,
+    CONF_HUB_NAME,
     DOMAIN,
     SERVICE_GET_RECENT_ASSETS,
     SERVICE_REFRESH,
@@ -112,6 +114,9 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         self._subentry = subentry
         self._album_id = subentry.data[CONF_ALBUM_ID]
         self._album_name = subentry.data.get(CONF_ALBUM_NAME, "Unknown Album")
+        self._hub_name = entry.data.get(CONF_HUB_NAME, "Immich")
+        # Generate unique_id prefix: {hub_name}_album_{album_name}
+        self._unique_id_prefix = slugify(f"{self._hub_name}_album_{self._album_name}")
 
     @property
     def _album_data(self) -> AlbumData | None:
@@ -171,7 +176,7 @@ class ImmichAlbumAssetCountSensor(ImmichAlbumBaseSensor):
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, entry, subentry)
-        self._attr_unique_id = f"{subentry.subentry_id}_asset_count"
+        self._attr_unique_id = f"{self._unique_id_prefix}_asset_count"
 
     @property
     def native_value(self) -> int | None:
@@ -222,7 +227,7 @@ class ImmichAlbumPhotoCountSensor(ImmichAlbumBaseSensor):
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, entry, subentry)
-        self._attr_unique_id = f"{subentry.subentry_id}_photo_count"
+        self._attr_unique_id = f"{self._unique_id_prefix}_photo_count"
 
     @property
     def native_value(self) -> int | None:
@@ -247,7 +252,7 @@ class ImmichAlbumVideoCountSensor(ImmichAlbumBaseSensor):
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, entry, subentry)
-        self._attr_unique_id = f"{subentry.subentry_id}_video_count"
+        self._attr_unique_id = f"{self._unique_id_prefix}_video_count"
 
     @property
     def native_value(self) -> int | None:
@@ -272,7 +277,7 @@ class ImmichAlbumLastUpdatedSensor(ImmichAlbumBaseSensor):
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, entry, subentry)
-        self._attr_unique_id = f"{subentry.subentry_id}_last_updated"
+        self._attr_unique_id = f"{self._unique_id_prefix}_last_updated"
 
     @property
     def native_value(self) -> datetime | None:
@@ -302,7 +307,7 @@ class ImmichAlbumCreatedSensor(ImmichAlbumBaseSensor):
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, entry, subentry)
-        self._attr_unique_id = f"{subentry.subentry_id}_created"
+        self._attr_unique_id = f"{self._unique_id_prefix}_created"
 
     @property
     def native_value(self) -> datetime | None:
@@ -332,7 +337,7 @@ class ImmichAlbumPeopleSensor(ImmichAlbumBaseSensor):
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, entry, subentry)
-        self._attr_unique_id = f"{subentry.subentry_id}_people_count"
+        self._attr_unique_id = f"{self._unique_id_prefix}_people_count"
 
     @property
     def native_value(self) -> int | None:
@@ -366,7 +371,7 @@ class ImmichAlbumPublicUrlSensor(ImmichAlbumBaseSensor):
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, entry, subentry)
-        self._attr_unique_id = f"{subentry.subentry_id}_public_url"
+        self._attr_unique_id = f"{self._unique_id_prefix}_public_url"
 
     @property
     def native_value(self) -> str | None:
@@ -411,7 +416,7 @@ class ImmichAlbumProtectedUrlSensor(ImmichAlbumBaseSensor):
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, entry, subentry)
-        self._attr_unique_id = f"{subentry.subentry_id}_protected_url"
+        self._attr_unique_id = f"{self._unique_id_prefix}_protected_url"
 
     @property
     def native_value(self) -> str | None:
@@ -451,7 +456,7 @@ class ImmichAlbumProtectedPasswordSensor(ImmichAlbumBaseSensor):
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, entry, subentry)
-        self._attr_unique_id = f"{subentry.subentry_id}_protected_password"
+        self._attr_unique_id = f"{self._unique_id_prefix}_protected_password"
 
     @property
     def native_value(self) -> str | None:

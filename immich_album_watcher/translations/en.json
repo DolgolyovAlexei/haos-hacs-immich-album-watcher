@@ -51,10 +51,12 @@
                 "title": "Connect to Immich",
                 "description": "Enter your Immich server details. You can get an API key from Immich → User Settings → API Keys.",
                 "data": {
+                    "hub_name": "Hub Name",
                     "immich_url": "Immich URL",
                     "api_key": "API Key"
                 },
                 "data_description": {
+                    "hub_name": "A name for this Immich server (used in entity IDs)",
                     "immich_url": "The URL of your Immich server (e.g., http://192.168.1.100:2283)",
                     "api_key": "Your Immich API key"
                 }
