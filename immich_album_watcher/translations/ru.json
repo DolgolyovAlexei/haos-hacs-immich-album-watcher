@@ -54,6 +54,9 @@
         "sensor": {
             "album_asset_count": {
                 "name": "{album_name}: Число файлов"
+            },
+            "album_last_updated": {
+                "name": "{album_name}: Последнее обновление"
             }
         }
     }

@@ -6,9 +6,11 @@ import logging
 from typing import Any
 
 from homeassistant.components.sensor import (
+    SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
+from datetime import datetime
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
@@ -39,21 +41,18 @@ async def async_setup_entry(
     coordinator: ImmichAlbumWatcherCoordinator = hass.data[DOMAIN][entry.entry_id]
     album_ids = entry.options.get(CONF_ALBUMS, [])
 
-    entities = [
-        ImmichAlbumSensor(coordinator, entry, album_id)
-        for album_id in album_ids
-    ]
+    entities: list[SensorEntity] = []
+    for album_id in album_ids:
+        entities.append(ImmichAlbumAssetCountSensor(coordinator, entry, album_id))
+        entities.append(ImmichAlbumLastUpdatedSensor(coordinator, entry, album_id))
 
     async_add_entities(entities)
 
 
-class ImmichAlbumSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], SensorEntity):
-    """Sensor representing an Immich album."""
+class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], SensorEntity):
+    """Base sensor for Immich album."""
 
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:image-album"
-
-    _attr_translation_key = "album_asset_count"
+    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -65,10 +64,6 @@ class ImmichAlbumSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Sensor
         super().__init__(coordinator)
         self._album_id = album_id
         self._entry = entry
-
-        # Entity IDs and names will be set when data is available
-        self._attr_unique_id = f"{entry.entry_id}_{album_id}"
-        self._attr_has_entity_name = True
 
     @property
     def _album_data(self) -> AlbumData | None:
@@ -85,16 +80,49 @@ class ImmichAlbumSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Sensor
         return {"album_name": f"Album {self._album_id[:8]}"}
 
     @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self.coordinator.last_update_success and self._album_data is not None
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry.entry_id)},
+            name="Immich Album Watcher",
+            manufacturer="Immich",
+            entry_type="service",
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.async_write_ha_state()
+
+
+class ImmichAlbumAssetCountSensor(ImmichAlbumBaseSensor):
+    """Sensor representing an Immich album asset count."""
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:image-album"
+    _attr_translation_key = "album_asset_count"
+
+    def __init__(
+        self,
+        coordinator: ImmichAlbumWatcherCoordinator,
+        entry: ConfigEntry,
+        album_id: str,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, album_id)
+        self._attr_unique_id = f"{entry.entry_id}_{album_id}_asset_count"
+
+    @property
     def native_value(self) -> int | None:
         """Return the state of the sensor (asset count)."""
         if self._album_data:
             return self._album_data.asset_count
         return None
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.last_update_success and self._album_data is not None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -119,17 +147,30 @@ class ImmichAlbumSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Sensor
 
         return attrs
 
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return device info."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.entry_id)},
-            name="Immich Album Watcher",
-            manufacturer="Immich",
-            entry_type="service",
-        )
 
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        self.async_write_ha_state()
+class ImmichAlbumLastUpdatedSensor(ImmichAlbumBaseSensor):
+    """Sensor representing an Immich album last updated time."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:clock-outline"
+    _attr_translation_key = "album_last_updated"
+
+    def __init__(
+        self,
+        coordinator: ImmichAlbumWatcherCoordinator,
+        entry: ConfigEntry,
+        album_id: str,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, album_id)
+        self._attr_unique_id = f"{entry.entry_id}_{album_id}_last_updated"
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the state of the sensor (last updated datetime)."""
+        if self._album_data and self._album_data.updated_at:
+            try:
+                return datetime.fromisoformat(self._album_data.updated_at.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+        return None

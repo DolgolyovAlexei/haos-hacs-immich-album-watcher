@@ -3,6 +3,9 @@
         "sensor": {
             "album_asset_count": {
                 "name": "{album_name}: Asset Count"
+            },
+            "album_last_updated": {
+                "name": "{album_name}: Last Updated"
             }
         }
     },
