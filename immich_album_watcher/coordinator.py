@@ -252,6 +252,15 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[dict[str, AlbumData]])
         """Force an immediate refresh."""
         await self.async_request_refresh()
 
+    async def async_refresh_album(self, album_id: str) -> None:
+        """Force an immediate refresh of a specific album.
+
+        Currently refreshes all albums as they share the same coordinator,
+        but the method signature allows for future optimization.
+        """
+        if album_id in self._album_ids:
+            await self.async_request_refresh()
+
     async def async_get_recent_assets(
         self, album_id: str, count: int = 10
     ) -> list[dict[str, Any]]:

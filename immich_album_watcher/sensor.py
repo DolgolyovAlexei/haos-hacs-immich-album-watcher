@@ -6,13 +6,16 @@ import logging
 from datetime import datetime
 from typing import Any
 
+import voluptuous as vol
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant, ServiceResponse, SupportsResponse, callback
+from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -34,6 +37,8 @@ from .const import (
     ATTR_VIDEO_COUNT,
     CONF_ALBUMS,
     DOMAIN,
+    SERVICE_GET_RECENT_ASSETS,
+    SERVICE_REFRESH,
 )
 from .coordinator import AlbumData, ImmichAlbumWatcherCoordinator
 
@@ -62,6 +67,26 @@ async def async_setup_entry(
         entities.append(ImmichAlbumProtectedPasswordSensor(coordinator, entry, album_id))
 
     async_add_entities(entities)
+
+    # Register entity services
+    platform = entity_platform.async_get_current_platform()
+
+    platform.async_register_entity_service(
+        SERVICE_REFRESH,
+        {},
+        "async_refresh_album",
+    )
+
+    platform.async_register_entity_service(
+        SERVICE_GET_RECENT_ASSETS,
+        {
+            vol.Optional("count", default=10): vol.All(
+                vol.Coerce(int), vol.Range(min=1, max=100)
+            ),
+        },
+        "async_get_recent_assets",
+        supports_response=SupportsResponse.ONLY,
+    )
 
 
 class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], SensorEntity):
@@ -113,6 +138,15 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         self.async_write_ha_state()
+
+    async def async_refresh_album(self) -> None:
+        """Refresh data for this album."""
+        await self.coordinator.async_refresh_album(self._album_id)
+
+    async def async_get_recent_assets(self, count: int = 10) -> ServiceResponse:
+        """Get recent assets for this album."""
+        assets = await self.coordinator.async_get_recent_assets(self._album_id, count)
+        return {"assets": assets}
 
 
 class ImmichAlbumAssetCountSensor(ImmichAlbumBaseSensor):

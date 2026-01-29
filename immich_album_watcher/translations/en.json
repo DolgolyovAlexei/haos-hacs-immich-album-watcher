@@ -99,16 +99,12 @@
     "services": {
         "refresh": {
             "name": "Refresh",
-            "description": "Force an immediate refresh of all album data from Immich."
+            "description": "Force an immediate refresh of album data from Immich."
         },
         "get_recent_assets": {
             "name": "Get Recent Assets",
-            "description": "Get the most recent assets from a specific album.",
+            "description": "Get the most recent assets from the targeted album.",
             "fields": {
-                "album_id": {
-                    "name": "Album ID",
-                    "description": "The ID of the album to get recent assets from."
-                },
                 "count": {
                     "name": "Count",
                     "description": "Number of recent assets to return (1-100)."
