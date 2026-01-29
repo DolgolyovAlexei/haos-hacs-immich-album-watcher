@@ -2,31 +2,6 @@
 
 A collection of custom integrations for Home Assistant.
 
-## Repository Structure
-
-```
-haos-integrations/
-├── immich_album_watcher/    # Immich Album Watcher integration
-│   ├── __init__.py
-│   ├── binary_sensor.py
-│   ├── camera.py
-│   ├── config_flow.py
-│   ├── const.py
-│   ├── coordinator.py
-│   ├── manifest.json
-│   ├── sensor.py
-│   ├── services.yaml
-│   ├── strings.json
-│   ├── icon.png
-│   ├── README.md
-│   └── translations/
-│       ├── en.json
-│       └── ru.json
-├── .gitignore
-├── LICENSE
-└── README.md
-```
-
 ## Available Integrations
 
 | Integration | Description | Documentation |
