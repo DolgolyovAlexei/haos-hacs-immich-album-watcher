@@ -9,7 +9,12 @@ DOMAIN: Final = "immich_album_watcher"
 CONF_IMMICH_URL: Final = "immich_url"
 CONF_API_KEY: Final = "api_key"
 CONF_ALBUMS: Final = "albums"
+CONF_ALBUM_ID: Final = "album_id"
+CONF_ALBUM_NAME: Final = "album_name"
 CONF_SCAN_INTERVAL: Final = "scan_interval"
+
+# Subentry type
+SUBENTRY_TYPE_ALBUM: Final = "album"
 
 # Defaults
 DEFAULT_SCAN_INTERVAL: Final = 60  # seconds

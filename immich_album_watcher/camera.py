@@ -8,14 +8,15 @@ from datetime import timedelta
 import aiohttp
 
 from homeassistant.components.camera import Camera
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_ALBUMS, DOMAIN
+from .const import CONF_ALBUM_ID, CONF_ALBUM_NAME, DOMAIN
 from .coordinator import AlbumData, ImmichAlbumWatcherCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,15 +30,19 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Immich Album Watcher cameras from a config entry."""
-    coordinator: ImmichAlbumWatcherCoordinator = hass.data[DOMAIN][entry.entry_id]
-    album_ids = entry.options.get(CONF_ALBUMS, [])
+    # Iterate through all album subentries
+    for subentry_id, subentry in entry.subentries.items():
+        subentry_data = hass.data[DOMAIN][entry.entry_id]["subentries"].get(subentry_id)
+        if not subentry_data:
+            _LOGGER.error("Subentry data not found for %s", subentry_id)
+            continue
 
-    entities = [
-        ImmichAlbumThumbnailCamera(coordinator, entry, album_id)
-        for album_id in album_ids
-    ]
+        coordinator = subentry_data.coordinator
 
-    async_add_entities(entities)
+        async_add_entities(
+            [ImmichAlbumThumbnailCamera(coordinator, entry, subentry)],
+            config_subentry_id=subentry_id,
+        )
 
 
 class ImmichAlbumThumbnailCamera(
@@ -52,30 +57,30 @@ class ImmichAlbumThumbnailCamera(
         self,
         coordinator: ImmichAlbumWatcherCoordinator,
         entry: ConfigEntry,
-        album_id: str,
+        subentry: ConfigSubentry,
     ) -> None:
         """Initialize the camera."""
         CoordinatorEntity.__init__(self, coordinator)
         Camera.__init__(self)
-        self._album_id = album_id
         self._entry = entry
-        self._attr_unique_id = f"{entry.entry_id}_{album_id}_thumbnail"
+        self._subentry = subentry
+        self._album_id = subentry.data[CONF_ALBUM_ID]
+        self._album_name = subentry.data.get(CONF_ALBUM_NAME, "Unknown Album")
+        self._attr_unique_id = f"{subentry.subentry_id}_thumbnail"
         self._cached_image: bytes | None = None
         self._last_thumbnail_id: str | None = None
 
     @property
     def _album_data(self) -> AlbumData | None:
         """Get the album data from coordinator."""
-        if self.coordinator.data is None:
-            return None
-        return self.coordinator.data.get(self._album_id)
+        return self.coordinator.data
 
     @property
     def translation_placeholders(self) -> dict[str, str]:
         """Return translation placeholders."""
         if self._album_data:
             return {"album_name": self._album_data.name}
-        return {"album_name": f"Album {self._album_id[:8]}"}
+        return {"album_name": self._album_name}
 
     @property
     def available(self) -> bool:
@@ -88,12 +93,13 @@ class ImmichAlbumThumbnailCamera(
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Return device info."""
+        """Return device info - one device per album."""
         return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.entry_id)},
-            name="Immich Album Watcher",
+            identifiers={(DOMAIN, self._subentry.subentry_id)},
+            name=self._album_name,
             manufacturer="Immich",
-            entry_type="service",
+            entry_type=DeviceEntryType.SERVICE,
+            via_device=(DOMAIN, self._entry.entry_id),
         )
 
     @property

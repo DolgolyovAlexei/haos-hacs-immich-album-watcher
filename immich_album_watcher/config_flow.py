@@ -8,19 +8,26 @@ from typing import Any
 import aiohttp
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    ConfigSubentryFlow,
+    OptionsFlow,
+    SubentryFlowResult,
+)
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-import homeassistant.helpers.config_validation as cv
 
 from .const import (
-    CONF_ALBUMS,
+    CONF_ALBUM_ID,
+    CONF_ALBUM_NAME,
     CONF_API_KEY,
     CONF_IMMICH_URL,
     CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    SUBENTRY_TYPE_ALBUM,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -57,13 +64,12 @@ async def fetch_albums(
 class ImmichAlbumWatcherConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Immich Album Watcher."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._url: str | None = None
         self._api_key: str | None = None
-        self._albums: list[dict[str, Any]] = []
 
     @staticmethod
     @callback
@@ -71,9 +77,17 @@ class ImmichAlbumWatcherConfigFlow(ConfigFlow, domain=DOMAIN):
         """Get the options flow for this handler."""
         return ImmichAlbumWatcherOptionsFlow(config_entry)
 
+    @classmethod
+    @callback
+    def async_get_supported_subentry_types(
+        cls, config_entry: ConfigEntry
+    ) -> dict[str, type[ConfigSubentryFlow]]:
+        """Return supported subentry types."""
+        return {SUBENTRY_TYPE_ALBUM: ImmichAlbumSubentryFlowHandler}
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle the initial step - connection details."""
         errors: dict[str, str] = {}
 
@@ -85,12 +99,21 @@ class ImmichAlbumWatcherConfigFlow(ConfigFlow, domain=DOMAIN):
 
             try:
                 await validate_connection(session, self._url, self._api_key)
-                self._albums = await fetch_albums(session, self._url, self._api_key)
 
-                if not self._albums:
-                    errors["base"] = "no_albums"
-                else:
-                    return await self.async_step_albums()
+                # Set unique ID based on URL
+                await self.async_set_unique_id(self._url)
+                self._abort_if_unique_id_configured()
+
+                return self.async_create_entry(
+                    title="Immich Album Watcher",
+                    data={
+                        CONF_IMMICH_URL: self._url,
+                        CONF_API_KEY: self._api_key,
+                    },
+                    options={
+                        CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
+                    },
+                )
 
             except InvalidAuth:
                 errors["base"] = "invalid_auth"
@@ -116,45 +139,87 @@ class ImmichAlbumWatcherConfigFlow(ConfigFlow, domain=DOMAIN):
             },
         )
 
-    async def async_step_albums(
+
+class ImmichAlbumSubentryFlowHandler(ConfigSubentryFlow):
+    """Handle subentry flow for adding albums."""
+
+    def __init__(self) -> None:
+        """Initialize the subentry flow."""
+        super().__init__()
+        self._albums: list[dict[str, Any]] = []
+
+    async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle album selection step."""
+    ) -> SubentryFlowResult:
+        """Handle album selection."""
         errors: dict[str, str] = {}
 
+        # Get parent config entry data
+        config_entry = self._get_entry()
+
+        url = config_entry.data[CONF_IMMICH_URL]
+        api_key = config_entry.data[CONF_API_KEY]
+
+        # Fetch available albums
+        session = async_get_clientsession(self.hass)
+        try:
+            self._albums = await fetch_albums(session, url, api_key)
+        except Exception:
+            _LOGGER.exception("Failed to fetch albums")
+            errors["base"] = "cannot_connect"
+            return self.async_show_form(
+                step_id="user",
+                data_schema=vol.Schema({}),
+                errors=errors,
+            )
+
+        if not self._albums:
+            return self.async_abort(reason="no_albums")
+
         if user_input is not None:
-            selected_albums = user_input.get(CONF_ALBUMS, [])
+            album_id = user_input[CONF_ALBUM_ID]
 
-            if not selected_albums:
-                errors["base"] = "no_albums_selected"
-            else:
-                # Create unique ID based on URL
-                await self.async_set_unique_id(self._url)
-                self._abort_if_unique_id_configured()
+            # Check if album is already configured
+            for subentry in config_entry.subentries.values():
+                if subentry.data.get(CONF_ALBUM_ID) == album_id:
+                    return self.async_abort(reason="album_already_configured")
 
-                return self.async_create_entry(
-                    title="Immich Album Watcher",
-                    data={
-                        CONF_IMMICH_URL: self._url,
-                        CONF_API_KEY: self._api_key,
-                    },
-                    options={
-                        CONF_ALBUMS: selected_albums,
-                        CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
-                    },
-                )
+            # Find album name
+            album_name = "Unknown Album"
+            for album in self._albums:
+                if album["id"] == album_id:
+                    album_name = album.get("albumName", "Unnamed")
+                    break
 
-        # Build album selection list
+            return self.async_create_entry(
+                title=album_name,
+                data={
+                    CONF_ALBUM_ID: album_id,
+                    CONF_ALBUM_NAME: album_name,
+                },
+            )
+
+        # Get already configured album IDs
+        configured_albums = set()
+        for subentry in config_entry.subentries.values():
+            if aid := subentry.data.get(CONF_ALBUM_ID):
+                configured_albums.add(aid)
+
+        # Build album selection list (excluding already configured)
         album_options = {
             album["id"]: f"{album.get('albumName', 'Unnamed')} ({album.get('assetCount', 0)} assets)"
             for album in self._albums
+            if album["id"] not in configured_albums
         }
 
+        if not album_options:
+            return self.async_abort(reason="all_albums_configured")
+
         return self.async_show_form(
-            step_id="albums",
+            step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_ALBUMS): cv.multi_select(album_options),
+                    vol.Required(CONF_ALBUM_ID): vol.In(album_options),
                 }
             ),
             errors=errors,
@@ -167,43 +232,21 @@ class ImmichAlbumWatcherOptionsFlow(OptionsFlow):
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize options flow."""
         self._config_entry = config_entry
-        self._albums: list[dict[str, Any]] = []
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Manage the options."""
-        errors: dict[str, str] = {}
-
-        # Fetch current albums from Immich
-        session = async_get_clientsession(self.hass)
-        url = self._config_entry.data[CONF_IMMICH_URL]
-        api_key = self._config_entry.data[CONF_API_KEY]
-
-        try:
-            self._albums = await fetch_albums(session, url, api_key)
-        except Exception:
-            _LOGGER.exception("Failed to fetch albums")
-            errors["base"] = "cannot_connect"
-
-        if user_input is not None and not errors:
+        if user_input is not None:
             return self.async_create_entry(
                 title="",
                 data={
-                    CONF_ALBUMS: user_input.get(CONF_ALBUMS, []),
                     CONF_SCAN_INTERVAL: user_input.get(
                         CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
                     ),
                 },
             )
 
-        # Build album selection list
-        album_options = {
-            album["id"]: f"{album.get('albumName', 'Unnamed')} ({album.get('assetCount', 0)} assets)"
-            for album in self._albums
-        }
-
-        current_albums = self._config_entry.options.get(CONF_ALBUMS, [])
         current_interval = self._config_entry.options.get(
             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
         )
@@ -212,15 +255,11 @@ class ImmichAlbumWatcherOptionsFlow(OptionsFlow):
             step_id="init",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_ALBUMS, default=current_albums): cv.multi_select(
-                        album_options
-                    ),
                     vol.Required(
                         CONF_SCAN_INTERVAL, default=current_interval
                     ): vol.All(vol.Coerce(int), vol.Range(min=10, max=3600)),
                 }
             ),
-            errors=errors,
         )
 
 

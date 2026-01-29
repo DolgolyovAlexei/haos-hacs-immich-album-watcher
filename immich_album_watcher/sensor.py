@@ -13,18 +13,17 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant, ServiceResponse, SupportsResponse, callback
 from homeassistant.helpers import entity_platform
+from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     ATTR_ALBUM_ID,
-    ATTR_ALBUM_PROTECTED_PASSWORD,
     ATTR_ALBUM_PROTECTED_URL,
-    ATTR_ALBUM_URL,
     ATTR_ALBUM_URLS,
     ATTR_ASSET_COUNT,
     ATTR_CREATED_AT,
@@ -35,7 +34,8 @@ from .const import (
     ATTR_SHARED,
     ATTR_THUMBNAIL_URL,
     ATTR_VIDEO_COUNT,
-    CONF_ALBUMS,
+    CONF_ALBUM_ID,
+    CONF_ALBUM_NAME,
     DOMAIN,
     SERVICE_GET_RECENT_ASSETS,
     SERVICE_REFRESH,
@@ -51,22 +51,28 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Immich Album Watcher sensors from a config entry."""
-    coordinator: ImmichAlbumWatcherCoordinator = hass.data[DOMAIN][entry.entry_id]
-    album_ids = entry.options.get(CONF_ALBUMS, [])
+    # Iterate through all album subentries
+    for subentry_id, subentry in entry.subentries.items():
+        subentry_data = hass.data[DOMAIN][entry.entry_id]["subentries"].get(subentry_id)
+        if not subentry_data:
+            _LOGGER.error("Subentry data not found for %s", subentry_id)
+            continue
 
-    entities: list[SensorEntity] = []
-    for album_id in album_ids:
-        entities.append(ImmichAlbumAssetCountSensor(coordinator, entry, album_id))
-        entities.append(ImmichAlbumPhotoCountSensor(coordinator, entry, album_id))
-        entities.append(ImmichAlbumVideoCountSensor(coordinator, entry, album_id))
-        entities.append(ImmichAlbumLastUpdatedSensor(coordinator, entry, album_id))
-        entities.append(ImmichAlbumCreatedSensor(coordinator, entry, album_id))
-        entities.append(ImmichAlbumPeopleSensor(coordinator, entry, album_id))
-        entities.append(ImmichAlbumPublicUrlSensor(coordinator, entry, album_id))
-        entities.append(ImmichAlbumProtectedUrlSensor(coordinator, entry, album_id))
-        entities.append(ImmichAlbumProtectedPasswordSensor(coordinator, entry, album_id))
+        coordinator = subentry_data.coordinator
 
-    async_add_entities(entities)
+        entities: list[SensorEntity] = [
+            ImmichAlbumAssetCountSensor(coordinator, entry, subentry),
+            ImmichAlbumPhotoCountSensor(coordinator, entry, subentry),
+            ImmichAlbumVideoCountSensor(coordinator, entry, subentry),
+            ImmichAlbumLastUpdatedSensor(coordinator, entry, subentry),
+            ImmichAlbumCreatedSensor(coordinator, entry, subentry),
+            ImmichAlbumPeopleSensor(coordinator, entry, subentry),
+            ImmichAlbumPublicUrlSensor(coordinator, entry, subentry),
+            ImmichAlbumProtectedUrlSensor(coordinator, entry, subentry),
+            ImmichAlbumProtectedPasswordSensor(coordinator, entry, subentry),
+        ]
+
+        async_add_entities(entities, config_subentry_id=subentry_id)
 
     # Register entity services
     platform = entity_platform.async_get_current_platform()
@@ -98,26 +104,26 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         self,
         coordinator: ImmichAlbumWatcherCoordinator,
         entry: ConfigEntry,
-        album_id: str,
+        subentry: ConfigSubentry,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
-        self._album_id = album_id
         self._entry = entry
+        self._subentry = subentry
+        self._album_id = subentry.data[CONF_ALBUM_ID]
+        self._album_name = subentry.data.get(CONF_ALBUM_NAME, "Unknown Album")
 
     @property
     def _album_data(self) -> AlbumData | None:
         """Get the album data from coordinator."""
-        if self.coordinator.data is None:
-            return None
-        return self.coordinator.data.get(self._album_id)
+        return self.coordinator.data
 
     @property
     def translation_placeholders(self) -> dict[str, str]:
         """Return translation placeholders."""
         if self._album_data:
             return {"album_name": self._album_data.name}
-        return {"album_name": f"Album {self._album_id[:8]}"}
+        return {"album_name": self._album_name}
 
     @property
     def available(self) -> bool:
@@ -126,12 +132,13 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Return device info."""
+        """Return device info - one device per album."""
         return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.entry_id)},
-            name="Immich Album Watcher",
+            identifiers={(DOMAIN, self._subentry.subentry_id)},
+            name=self._album_name,
             manufacturer="Immich",
-            entry_type="service",
+            entry_type=DeviceEntryType.SERVICE,
+            via_device=(DOMAIN, self._entry.entry_id),
         )
 
     @callback
@@ -141,11 +148,11 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
 
     async def async_refresh_album(self) -> None:
         """Refresh data for this album."""
-        await self.coordinator.async_refresh_album(self._album_id)
+        await self.coordinator.async_refresh_now()
 
     async def async_get_recent_assets(self, count: int = 10) -> ServiceResponse:
         """Get recent assets for this album."""
-        assets = await self.coordinator.async_get_recent_assets(self._album_id, count)
+        assets = await self.coordinator.async_get_recent_assets(count)
         return {"assets": assets}
 
 
@@ -160,11 +167,11 @@ class ImmichAlbumAssetCountSensor(ImmichAlbumBaseSensor):
         self,
         coordinator: ImmichAlbumWatcherCoordinator,
         entry: ConfigEntry,
-        album_id: str,
+        subentry: ConfigSubentry,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, album_id)
-        self._attr_unique_id = f"{entry.entry_id}_{album_id}_asset_count"
+        super().__init__(coordinator, entry, subentry)
+        self._attr_unique_id = f"{subentry.subentry_id}_asset_count"
 
     @property
     def native_value(self) -> int | None:
@@ -191,7 +198,6 @@ class ImmichAlbumAssetCountSensor(ImmichAlbumBaseSensor):
             ATTR_PEOPLE: list(self._album_data.people),
         }
 
-        # Add thumbnail URL if available
         if self._album_data.thumbnail_asset_id:
             attrs[ATTR_THUMBNAIL_URL] = (
                 f"{self.coordinator.immich_url}/api/assets/"
@@ -212,11 +218,11 @@ class ImmichAlbumPhotoCountSensor(ImmichAlbumBaseSensor):
         self,
         coordinator: ImmichAlbumWatcherCoordinator,
         entry: ConfigEntry,
-        album_id: str,
+        subentry: ConfigSubentry,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, album_id)
-        self._attr_unique_id = f"{entry.entry_id}_{album_id}_photo_count"
+        super().__init__(coordinator, entry, subentry)
+        self._attr_unique_id = f"{subentry.subentry_id}_photo_count"
 
     @property
     def native_value(self) -> int | None:
@@ -237,11 +243,11 @@ class ImmichAlbumVideoCountSensor(ImmichAlbumBaseSensor):
         self,
         coordinator: ImmichAlbumWatcherCoordinator,
         entry: ConfigEntry,
-        album_id: str,
+        subentry: ConfigSubentry,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, album_id)
-        self._attr_unique_id = f"{entry.entry_id}_{album_id}_video_count"
+        super().__init__(coordinator, entry, subentry)
+        self._attr_unique_id = f"{subentry.subentry_id}_video_count"
 
     @property
     def native_value(self) -> int | None:
@@ -262,11 +268,11 @@ class ImmichAlbumLastUpdatedSensor(ImmichAlbumBaseSensor):
         self,
         coordinator: ImmichAlbumWatcherCoordinator,
         entry: ConfigEntry,
-        album_id: str,
+        subentry: ConfigSubentry,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, album_id)
-        self._attr_unique_id = f"{entry.entry_id}_{album_id}_last_updated"
+        super().__init__(coordinator, entry, subentry)
+        self._attr_unique_id = f"{subentry.subentry_id}_last_updated"
 
     @property
     def native_value(self) -> datetime | None:
@@ -292,11 +298,11 @@ class ImmichAlbumCreatedSensor(ImmichAlbumBaseSensor):
         self,
         coordinator: ImmichAlbumWatcherCoordinator,
         entry: ConfigEntry,
-        album_id: str,
+        subentry: ConfigSubentry,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, album_id)
-        self._attr_unique_id = f"{entry.entry_id}_{album_id}_created"
+        super().__init__(coordinator, entry, subentry)
+        self._attr_unique_id = f"{subentry.subentry_id}_created"
 
     @property
     def native_value(self) -> datetime | None:
@@ -322,11 +328,11 @@ class ImmichAlbumPeopleSensor(ImmichAlbumBaseSensor):
         self,
         coordinator: ImmichAlbumWatcherCoordinator,
         entry: ConfigEntry,
-        album_id: str,
+        subentry: ConfigSubentry,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, album_id)
-        self._attr_unique_id = f"{entry.entry_id}_{album_id}_people_count"
+        super().__init__(coordinator, entry, subentry)
+        self._attr_unique_id = f"{subentry.subentry_id}_people_count"
 
     @property
     def native_value(self) -> int | None:
@@ -356,17 +362,17 @@ class ImmichAlbumPublicUrlSensor(ImmichAlbumBaseSensor):
         self,
         coordinator: ImmichAlbumWatcherCoordinator,
         entry: ConfigEntry,
-        album_id: str,
+        subentry: ConfigSubentry,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, album_id)
-        self._attr_unique_id = f"{entry.entry_id}_{album_id}_public_url"
+        super().__init__(coordinator, entry, subentry)
+        self._attr_unique_id = f"{subentry.subentry_id}_public_url"
 
     @property
     def native_value(self) -> str | None:
         """Return the state of the sensor (public URL)."""
         if self._album_data:
-            return self.coordinator.get_album_public_url(self._album_id)
+            return self.coordinator.get_public_url()
         return None
 
     @property
@@ -380,13 +386,11 @@ class ImmichAlbumPublicUrlSensor(ImmichAlbumBaseSensor):
             ATTR_SHARED: self._album_data.shared,
         }
 
-        # Include all accessible URLs if there are multiple
-        all_urls = self.coordinator.get_album_public_urls(self._album_id)
+        all_urls = self.coordinator.get_public_urls()
         if len(all_urls) > 1:
             attrs[ATTR_ALBUM_URLS] = all_urls
 
-        # Include detailed info about all shared links (including protected/expired)
-        links_info = self.coordinator.get_album_shared_links_info(self._album_id)
+        links_info = self.coordinator.get_shared_links_info()
         if links_info:
             attrs["shared_links"] = links_info
 
@@ -403,17 +407,17 @@ class ImmichAlbumProtectedUrlSensor(ImmichAlbumBaseSensor):
         self,
         coordinator: ImmichAlbumWatcherCoordinator,
         entry: ConfigEntry,
-        album_id: str,
+        subentry: ConfigSubentry,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, album_id)
-        self._attr_unique_id = f"{entry.entry_id}_{album_id}_protected_url"
+        super().__init__(coordinator, entry, subentry)
+        self._attr_unique_id = f"{subentry.subentry_id}_protected_url"
 
     @property
     def native_value(self) -> str | None:
         """Return the state of the sensor (protected URL)."""
         if self._album_data:
-            return self.coordinator.get_album_protected_url(self._album_id)
+            return self.coordinator.get_protected_url()
         return None
 
     @property
@@ -426,8 +430,7 @@ class ImmichAlbumProtectedUrlSensor(ImmichAlbumBaseSensor):
             ATTR_ALBUM_ID: self._album_data.id,
         }
 
-        # Include all protected URLs if there are multiple
-        all_urls = self.coordinator.get_album_protected_urls(self._album_id)
+        all_urls = self.coordinator.get_protected_urls()
         if len(all_urls) > 1:
             attrs["protected_urls"] = all_urls
 
@@ -444,17 +447,17 @@ class ImmichAlbumProtectedPasswordSensor(ImmichAlbumBaseSensor):
         self,
         coordinator: ImmichAlbumWatcherCoordinator,
         entry: ConfigEntry,
-        album_id: str,
+        subentry: ConfigSubentry,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, album_id)
-        self._attr_unique_id = f"{entry.entry_id}_{album_id}_protected_password"
+        super().__init__(coordinator, entry, subentry)
+        self._attr_unique_id = f"{subentry.subentry_id}_protected_password"
 
     @property
     def native_value(self) -> str | None:
         """Return the state of the sensor (protected link password)."""
         if self._album_data:
-            return self.coordinator.get_album_protected_password(self._album_id)
+            return self.coordinator.get_protected_password()
         return None
 
     @property
@@ -465,7 +468,5 @@ class ImmichAlbumProtectedPasswordSensor(ImmichAlbumBaseSensor):
 
         return {
             ATTR_ALBUM_ID: self._album_data.id,
-            ATTR_ALBUM_PROTECTED_URL: self.coordinator.get_album_protected_url(
-                self._album_id
-            ),
+            ATTR_ALBUM_PROTECTED_URL: self.coordinator.get_protected_url(),
         }

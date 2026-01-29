@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant
 
 from .const import (
-    CONF_ALBUMS,
+    CONF_ALBUM_ID,
+    CONF_ALBUM_NAME,
     CONF_API_KEY,
     CONF_IMMICH_URL,
     CONF_SCAN_INTERVAL,
@@ -21,60 +23,143 @@ from .coordinator import ImmichAlbumWatcherCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Immich Album Watcher from a config entry."""
+@dataclass
+class ImmichHubData:
+    """Data for the Immich hub."""
+
+    url: str
+    api_key: str
+    scan_interval: int
+
+
+@dataclass
+class ImmichAlbumRuntimeData:
+    """Runtime data for an album subentry."""
+
+    coordinator: ImmichAlbumWatcherCoordinator
+    album_id: str
+    album_name: str
+
+
+type ImmichConfigEntry = ConfigEntry[ImmichHubData]
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ImmichConfigEntry) -> bool:
+    """Set up Immich Album Watcher hub from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
     url = entry.data[CONF_IMMICH_URL]
     api_key = entry.data[CONF_API_KEY]
-    album_ids = entry.options.get(CONF_ALBUMS, [])
     scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
 
-    coordinator = ImmichAlbumWatcherCoordinator(
-        hass,
+    # Store hub data
+    entry.runtime_data = ImmichHubData(
         url=url,
         api_key=api_key,
-        album_ids=album_ids,
         scan_interval=scan_interval,
     )
 
-    # Fetch initial data
-    await coordinator.async_config_entry_first_refresh()
+    # Store hub reference
+    hass.data[DOMAIN][entry.entry_id] = {
+        "hub": entry.runtime_data,
+        "subentries": {},
+    }
 
-    hass.data[DOMAIN][entry.entry_id] = coordinator
+    # Track loaded subentries to detect changes
+    hass.data[DOMAIN][entry.entry_id]["loaded_subentries"] = set(entry.subentries.keys())
 
-    # Set up platforms
+    # Set up coordinators for all subentries (albums)
+    for subentry_id, subentry in entry.subentries.items():
+        await _async_setup_subentry_coordinator(hass, entry, subentry)
+
+    # Forward platform setup once - platforms will iterate through subentries
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Register update listener for options changes
-    entry.async_on_unload(entry.add_update_listener(async_update_options))
+    # Register update listener for options and subentry changes
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     _LOGGER.info(
-        "Immich Album Watcher set up successfully, watching %d albums",
-        len(album_ids),
+        "Immich Album Watcher hub set up successfully with %d albums",
+        len(entry.subentries),
     )
 
     return True
 
 
-async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Handle options update."""
-    coordinator: ImmichAlbumWatcherCoordinator = hass.data[DOMAIN][entry.entry_id]
+async def _async_setup_subentry_coordinator(
+    hass: HomeAssistant, entry: ImmichConfigEntry, subentry: ConfigSubentry
+) -> None:
+    """Set up coordinator for an album subentry."""
+    hub_data: ImmichHubData = entry.runtime_data
+    album_id = subentry.data[CONF_ALBUM_ID]
+    album_name = subentry.data.get(CONF_ALBUM_NAME, "Unknown Album")
 
-    album_ids = entry.options.get(CONF_ALBUMS, [])
-    scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+    _LOGGER.debug("Setting up coordinator for album: %s (%s)", album_name, album_id)
 
-    coordinator.update_config(album_ids, scan_interval)
+    # Create coordinator for this album
+    coordinator = ImmichAlbumWatcherCoordinator(
+        hass,
+        url=hub_data.url,
+        api_key=hub_data.api_key,
+        album_id=album_id,
+        album_name=album_name,
+        scan_interval=hub_data.scan_interval,
+    )
 
-    # Reload the entry to update sensors
-    await hass.config_entries.async_reload(entry.entry_id)
+    # Fetch initial data
+    await coordinator.async_config_entry_first_refresh()
+
+    # Store subentry runtime data
+    subentry_data = ImmichAlbumRuntimeData(
+        coordinator=coordinator,
+        album_id=album_id,
+        album_name=album_name,
+    )
+    hass.data[DOMAIN][entry.entry_id]["subentries"][subentry.subentry_id] = subentry_data
+
+    _LOGGER.info("Coordinator for album '%s' set up successfully", album_name)
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def _async_update_listener(
+    hass: HomeAssistant, entry: ImmichConfigEntry
+) -> None:
+    """Handle config entry updates (options or subentry changes)."""
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    loaded_subentries = entry_data.get("loaded_subentries", set())
+    current_subentries = set(entry.subentries.keys())
+
+    # Check if subentries changed
+    if loaded_subentries != current_subentries:
+        _LOGGER.info(
+            "Subentries changed (loaded: %d, current: %d), reloading entry",
+            len(loaded_subentries),
+            len(current_subentries),
+        )
+        await hass.config_entries.async_reload(entry.entry_id)
+        return
+
+    # Handle options-only update (scan interval change)
+    new_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+
+    # Update hub data
+    entry.runtime_data.scan_interval = new_interval
+
+    # Update all subentry coordinators
+    subentries_data = entry_data["subentries"]
+    for subentry_data in subentries_data.values():
+        subentry_data.coordinator.update_scan_interval(new_interval)
+
+    _LOGGER.info("Updated scan interval to %d seconds", new_interval)
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ImmichConfigEntry) -> bool:
     """Unload a config entry."""
+    # Unload all platforms
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
+        # Clean up hub data
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+        _LOGGER.info("Immich Album Watcher hub unloaded")
 
     return unload_ok

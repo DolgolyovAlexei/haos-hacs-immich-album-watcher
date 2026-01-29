@@ -58,42 +58,56 @@
                     "immich_url": "URL вашего сервера Immich (например, http://192.168.1.100:2283)",
                     "api_key": "Ваш API-ключ Immich"
                 }
-            },
-            "albums": {
-                "title": "Выбор альбомов",
-                "description": "Выберите альбомы для отслеживания изменений.",
-                "data": {
-                    "albums": "Альбомы для отслеживания"
-                }
             }
         },
         "error": {
             "cannot_connect": "Не удалось подключиться к серверу Immich",
             "invalid_auth": "Неверный API-ключ",
             "no_albums": "На сервере не найдено альбомов",
-            "no_albums_selected": "Пожалуйста, выберите хотя бы один альбом",
             "unknown": "Произошла непредвиденная ошибка"
         },
         "abort": {
             "already_configured": "Этот сервер Immich уже настроен"
         }
     },
+    "config_subentries": {
+        "album": {
+            "initiate_flow": {
+                "user": "Добавить альбом"
+            },
+            "entry_type": "Альбом",
+            "step": {
+                "user": {
+                    "title": "Добавить альбом для отслеживания",
+                    "description": "Выберите альбом с вашего сервера Immich для отслеживания изменений.",
+                    "data": {
+                        "album_id": "Альбом"
+                    }
+                }
+            },
+            "error": {
+                "cannot_connect": "Не удалось подключиться к серверу Immich"
+            },
+            "abort": {
+                "parent_not_found": "Конфигурация хаба не найдена",
+                "no_albums": "На сервере не найдено альбомов",
+                "all_albums_configured": "Все альбомы уже настроены",
+                "album_already_configured": "Этот альбом уже отслеживается"
+            }
+        }
+    },
     "options": {
         "step": {
             "init": {
                 "title": "Настройки Immich Album Watcher",
-                "description": "Настройте отслеживаемые альбомы и частоту проверки изменений.",
+                "description": "Настройте интервал опроса для всех альбомов.",
                 "data": {
-                    "albums": "Альбомы для отслеживания",
                     "scan_interval": "Интервал сканирования (секунды)"
                 },
                 "data_description": {
                     "scan_interval": "Как часто проверять изменения в альбомах (10-3600 секунд)"
                 }
             }
-        },
-        "error": {
-            "cannot_connect": "Не удалось подключиться к серверу Immich"
         }
     },
     "services": {
