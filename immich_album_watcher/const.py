@@ -47,6 +47,7 @@ ATTR_ASSET_CREATED: Final = "asset_created"
 ATTR_ASSET_OWNER: Final = "asset_owner"
 ATTR_ASSET_OWNER_ID: Final = "asset_owner_id"
 ATTR_ASSET_URL: Final = "asset_url"
+ATTR_ASSET_DESCRIPTION: Final = "asset_description"
 
 # Asset types
 ASSET_TYPE_IMAGE: Final = "IMAGE"

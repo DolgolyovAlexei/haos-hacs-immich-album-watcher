@@ -22,6 +22,7 @@ from .const import (
     ATTR_ALBUM_NAME,
     ATTR_ALBUM_URL,
     ATTR_ASSET_CREATED,
+    ATTR_ASSET_DESCRIPTION,
     ATTR_ASSET_FILENAME,
     ATTR_ASSET_OWNER,
     ATTR_ASSET_OWNER_ID,
@@ -98,6 +99,7 @@ class AssetInfo:
     created_at: str
     owner_id: str = ""
     owner_name: str = ""
+    description: str = ""
     people: list[str] = field(default_factory=list)
 
     @classmethod
@@ -114,6 +116,12 @@ class AssetInfo:
         if users_cache and owner_id:
             owner_name = users_cache.get(owner_id, "")
 
+        # Get description from exifInfo if available
+        description = ""
+        exif_info = data.get("exifInfo")
+        if exif_info:
+            description = exif_info.get("description", "") or ""
+
         return cls(
             id=data["id"],
             type=data.get("type", ASSET_TYPE_IMAGE),
@@ -121,6 +129,7 @@ class AssetInfo:
             created_at=data.get("fileCreatedAt", ""),
             owner_id=owner_id,
             owner_name=owner_name,
+            description=description,
             people=people,
         )
 
@@ -264,6 +273,7 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[dict[str, AlbumData]])
                 "type": asset.type,
                 "filename": asset.filename,
                 "created_at": asset.created_at,
+                "description": asset.description,
                 "people": asset.people,
                 "thumbnail_url": f"{self._url}/api/assets/{asset.id}/thumbnail",
             }
@@ -554,6 +564,7 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[dict[str, AlbumData]])
                 ATTR_ASSET_CREATED: asset.created_at,
                 ATTR_ASSET_OWNER: asset.owner_name,
                 ATTR_ASSET_OWNER_ID: asset.owner_id,
+                ATTR_ASSET_DESCRIPTION: asset.description,
                 ATTR_PEOPLE: asset.people,
             }
             # Add public URL if album has a shared link

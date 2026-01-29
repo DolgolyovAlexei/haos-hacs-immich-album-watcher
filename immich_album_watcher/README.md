@@ -26,6 +26,7 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
   - Filename
   - Creation date
   - Asset owner (who uploaded the asset)
+  - Asset description/caption
   - Public URL (if album has a shared link)
   - Detected people in the asset
 - **Services** - Custom service calls:
@@ -132,6 +133,7 @@ Each item in the `added_assets` list contains the following fields:
 | `asset_created` | Date/time when the asset was originally created |
 | `asset_owner` | Display name of the user who owns the asset |
 | `asset_owner_id` | Unique ID of the user who owns the asset |
+| `asset_description` | Description/caption of the asset (from EXIF data) |
 | `asset_url` | Public URL to view the asset (only present if album has a shared link) |
 | `people` | List of people detected in this specific asset |
 
