@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -10,7 +11,6 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from datetime import datetime
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
@@ -20,10 +20,14 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     ATTR_ALBUM_ID,
     ATTR_ASSET_COUNT,
+    ATTR_CREATED_AT,
     ATTR_LAST_UPDATED,
     ATTR_OWNER,
+    ATTR_PEOPLE,
+    ATTR_PHOTO_COUNT,
     ATTR_SHARED,
     ATTR_THUMBNAIL_URL,
+    ATTR_VIDEO_COUNT,
     CONF_ALBUMS,
     DOMAIN,
 )
@@ -44,7 +48,11 @@ async def async_setup_entry(
     entities: list[SensorEntity] = []
     for album_id in album_ids:
         entities.append(ImmichAlbumAssetCountSensor(coordinator, entry, album_id))
+        entities.append(ImmichAlbumPhotoCountSensor(coordinator, entry, album_id))
+        entities.append(ImmichAlbumVideoCountSensor(coordinator, entry, album_id))
         entities.append(ImmichAlbumLastUpdatedSensor(coordinator, entry, album_id))
+        entities.append(ImmichAlbumCreatedSensor(coordinator, entry, album_id))
+        entities.append(ImmichAlbumPeopleSensor(coordinator, entry, album_id))
 
     async_add_entities(entities)
 
@@ -133,9 +141,13 @@ class ImmichAlbumAssetCountSensor(ImmichAlbumBaseSensor):
         attrs = {
             ATTR_ALBUM_ID: self._album_data.id,
             ATTR_ASSET_COUNT: self._album_data.asset_count,
+            ATTR_PHOTO_COUNT: self._album_data.photo_count,
+            ATTR_VIDEO_COUNT: self._album_data.video_count,
             ATTR_LAST_UPDATED: self._album_data.updated_at,
+            ATTR_CREATED_AT: self._album_data.created_at,
             ATTR_SHARED: self._album_data.shared,
             ATTR_OWNER: self._album_data.owner,
+            ATTR_PEOPLE: list(self._album_data.people),
         }
 
         # Add thumbnail URL if available
@@ -146,6 +158,56 @@ class ImmichAlbumAssetCountSensor(ImmichAlbumBaseSensor):
             )
 
         return attrs
+
+
+class ImmichAlbumPhotoCountSensor(ImmichAlbumBaseSensor):
+    """Sensor representing an Immich album photo count."""
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:image"
+    _attr_translation_key = "album_photo_count"
+
+    def __init__(
+        self,
+        coordinator: ImmichAlbumWatcherCoordinator,
+        entry: ConfigEntry,
+        album_id: str,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, album_id)
+        self._attr_unique_id = f"{entry.entry_id}_{album_id}_photo_count"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the state of the sensor (photo count)."""
+        if self._album_data:
+            return self._album_data.photo_count
+        return None
+
+
+class ImmichAlbumVideoCountSensor(ImmichAlbumBaseSensor):
+    """Sensor representing an Immich album video count."""
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:video"
+    _attr_translation_key = "album_video_count"
+
+    def __init__(
+        self,
+        coordinator: ImmichAlbumWatcherCoordinator,
+        entry: ConfigEntry,
+        album_id: str,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, album_id)
+        self._attr_unique_id = f"{entry.entry_id}_{album_id}_video_count"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the state of the sensor (video count)."""
+        if self._album_data:
+            return self._album_data.video_count
+        return None
 
 
 class ImmichAlbumLastUpdatedSensor(ImmichAlbumBaseSensor):
@@ -170,7 +232,74 @@ class ImmichAlbumLastUpdatedSensor(ImmichAlbumBaseSensor):
         """Return the state of the sensor (last updated datetime)."""
         if self._album_data and self._album_data.updated_at:
             try:
-                return datetime.fromisoformat(self._album_data.updated_at.replace("Z", "+00:00"))
+                return datetime.fromisoformat(
+                    self._album_data.updated_at.replace("Z", "+00:00")
+                )
             except ValueError:
                 return None
         return None
+
+
+class ImmichAlbumCreatedSensor(ImmichAlbumBaseSensor):
+    """Sensor representing an Immich album creation date."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:calendar-plus"
+    _attr_translation_key = "album_created"
+
+    def __init__(
+        self,
+        coordinator: ImmichAlbumWatcherCoordinator,
+        entry: ConfigEntry,
+        album_id: str,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, album_id)
+        self._attr_unique_id = f"{entry.entry_id}_{album_id}_created"
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the state of the sensor (creation datetime)."""
+        if self._album_data and self._album_data.created_at:
+            try:
+                return datetime.fromisoformat(
+                    self._album_data.created_at.replace("Z", "+00:00")
+                )
+            except ValueError:
+                return None
+        return None
+
+
+class ImmichAlbumPeopleSensor(ImmichAlbumBaseSensor):
+    """Sensor representing people detected in an Immich album."""
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:account-group"
+    _attr_translation_key = "album_people_count"
+
+    def __init__(
+        self,
+        coordinator: ImmichAlbumWatcherCoordinator,
+        entry: ConfigEntry,
+        album_id: str,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, album_id)
+        self._attr_unique_id = f"{entry.entry_id}_{album_id}_people_count"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the state of the sensor (number of unique people)."""
+        if self._album_data:
+            return len(self._album_data.people)
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        if not self._album_data:
+            return {}
+
+        return {
+            ATTR_PEOPLE: list(self._album_data.people),
+        }

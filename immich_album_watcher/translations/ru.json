@@ -1,4 +1,36 @@
 {
+    "entity": {
+        "sensor": {
+            "album_asset_count": {
+                "name": "{album_name}: Число файлов"
+            },
+            "album_photo_count": {
+                "name": "{album_name}: Число фото"
+            },
+            "album_video_count": {
+                "name": "{album_name}: Число видео"
+            },
+            "album_last_updated": {
+                "name": "{album_name}: Последнее обновление"
+            },
+            "album_created": {
+                "name": "{album_name}: Дата создания"
+            },
+            "album_people_count": {
+                "name": "{album_name}: Число людей"
+            }
+        },
+        "binary_sensor": {
+            "album_new_assets": {
+                "name": "{album_name}: Новые файлы"
+            }
+        },
+        "camera": {
+            "album_thumbnail": {
+                "name": "{album_name}: Превью"
+            }
+        }
+    },
     "config": {
         "step": {
             "user": {
@@ -50,13 +82,23 @@
             "cannot_connect": "Не удалось подключиться к серверу Immich"
         }
     },
-    "entity": {
-        "sensor": {
-            "album_asset_count": {
-                "name": "{album_name}: Число файлов"
-            },
-            "album_last_updated": {
-                "name": "{album_name}: Последнее обновление"
+    "services": {
+        "refresh": {
+            "name": "Обновить",
+            "description": "Принудительно обновить данные всех альбомов из Immich."
+        },
+        "get_recent_assets": {
+            "name": "Получить последние файлы",
+            "description": "Получить последние файлы из указанного альбома.",
+            "fields": {
+                "album_id": {
+                    "name": "ID альбома",
+                    "description": "ID альбома для получения последних файлов."
+                },
+                "count": {
+                    "name": "Количество",
+                    "description": "Количество возвращаемых файлов (1-100)."
+                }
             }
         }
     }

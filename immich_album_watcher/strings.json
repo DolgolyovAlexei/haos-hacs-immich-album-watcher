@@ -4,8 +4,30 @@
             "album_asset_count": {
                 "name": "{album_name}: Asset Count"
             },
+            "album_photo_count": {
+                "name": "{album_name}: Photo Count"
+            },
+            "album_video_count": {
+                "name": "{album_name}: Video Count"
+            },
             "album_last_updated": {
                 "name": "{album_name}: Last Updated"
+            },
+            "album_created": {
+                "name": "{album_name}: Created"
+            },
+            "album_people_count": {
+                "name": "{album_name}: People Count"
+            }
+        },
+        "binary_sensor": {
+            "album_new_assets": {
+                "name": "{album_name}: New Assets"
+            }
+        },
+        "camera": {
+            "album_thumbnail": {
+                "name": "{album_name}: Thumbnail"
             }
         }
     },
@@ -58,6 +80,26 @@
         },
         "error": {
             "cannot_connect": "Failed to connect to Immich server"
+        }
+    },
+    "services": {
+        "refresh": {
+            "name": "Refresh",
+            "description": "Force an immediate refresh of all album data from Immich."
+        },
+        "get_recent_assets": {
+            "name": "Get Recent Assets",
+            "description": "Get the most recent assets from a specific album.",
+            "fields": {
+                "album_id": {
+                    "name": "Album ID",
+                    "description": "The ID of the album to get recent assets from."
+                },
+                "count": {
+                    "name": "Count",
+                    "description": "Number of recent assets to return (1-100)."
+                }
+            }
         }
     }
 }
