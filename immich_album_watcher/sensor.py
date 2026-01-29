@@ -51,8 +51,9 @@ class ImmichAlbumSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Sensor
     """Sensor representing an Immich album."""
 
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = "assets"
     _attr_icon = "mdi:image-album"
+
+    _attr_translation_key = "album_asset_count"
 
     def __init__(
         self,
@@ -77,11 +78,11 @@ class ImmichAlbumSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Sensor
         return self.coordinator.data.get(self._album_id)
 
     @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
+    def translation_placeholders(self) -> dict[str, str]:
+        """Return translation placeholders."""
         if self._album_data:
-            return self._album_data.name
-        return f"Album {self._album_id[:8]}"
+            return {"album_name": self._album_data.name}
+        return {"album_name": f"Album {self._album_id[:8]}"}
 
     @property
     def native_value(self) -> int | None:

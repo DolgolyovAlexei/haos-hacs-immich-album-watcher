@@ -1,0 +1,60 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Подключение к Immich",
+                "description": "Введите данные вашего сервера Immich. API-ключ можно получить в Immich → Настройки пользователя → API-ключи.",
+                "data": {
+                    "immich_url": "URL Immich",
+                    "api_key": "API-ключ"
+                },
+                "data_description": {
+                    "immich_url": "URL вашего сервера Immich (например, http://192.168.1.100:2283)",
+                    "api_key": "Ваш API-ключ Immich"
+                }
+            },
+            "albums": {
+                "title": "Выбор альбомов",
+                "description": "Выберите альбомы для отслеживания изменений.",
+                "data": {
+                    "albums": "Альбомы для отслеживания"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Не удалось подключиться к серверу Immich",
+            "invalid_auth": "Неверный API-ключ",
+            "no_albums": "На сервере не найдено альбомов",
+            "no_albums_selected": "Пожалуйста, выберите хотя бы один альбом",
+            "unknown": "Произошла непредвиденная ошибка"
+        },
+        "abort": {
+            "already_configured": "Этот сервер Immich уже настроен"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Настройки Immich Album Watcher",
+                "description": "Настройте отслеживаемые альбомы и частоту проверки изменений.",
+                "data": {
+                    "albums": "Альбомы для отслеживания",
+                    "scan_interval": "Интервал сканирования (секунды)"
+                },
+                "data_description": {
+                    "scan_interval": "Как часто проверять изменения в альбомах (10-3600 секунд)"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Не удалось подключиться к серверу Immich"
+        }
+    },
+    "entity": {
+        "sensor": {
+            "album_asset_count": {
+                "name": "{album_name}: Число файлов"
+            }
+        }
+    }
+}

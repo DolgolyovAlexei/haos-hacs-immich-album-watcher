@@ -1,4 +1,11 @@
 {
+    "entity": {
+        "sensor": {
+            "album_asset_count": {
+                "name": "{album_name}: Asset Count"
+            }
+        }
+    },
     "config": {
         "step": {
             "user": {
