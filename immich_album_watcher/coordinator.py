@@ -41,6 +41,54 @@ _LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
+class SharedLinkInfo:
+    """Data class for shared link information."""
+
+    id: str
+    key: str
+    has_password: bool = False
+    password: str | None = None
+    expires_at: datetime | None = None
+    allow_download: bool = True
+    show_metadata: bool = True
+
+    @property
+    def is_expired(self) -> bool:
+        """Check if the link has expired."""
+        if self.expires_at is None:
+            return False
+        return datetime.now(self.expires_at.tzinfo) > self.expires_at
+
+    @property
+    def is_accessible(self) -> bool:
+        """Check if the link is accessible without password and not expired."""
+        return not self.has_password and not self.is_expired
+
+    @classmethod
+    def from_api_response(cls, data: dict[str, Any]) -> SharedLinkInfo:
+        """Create SharedLinkInfo from API response."""
+        expires_at = None
+        if data.get("expiresAt"):
+            try:
+                expires_at = datetime.fromisoformat(
+                    data["expiresAt"].replace("Z", "+00:00")
+                )
+            except ValueError:
+                pass
+
+        password = data.get("password")
+        return cls(
+            id=data["id"],
+            key=data["key"],
+            has_password=bool(password),
+            password=password if password else None,
+            expires_at=expires_at,
+            allow_download=data.get("allowDownload", True),
+            show_metadata=data.get("showMetadata", True),
+        )
+
+
+@dataclass
 class AssetInfo:
     """Data class for asset information."""
 
@@ -174,7 +222,7 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[dict[str, AlbumData]])
         self._session: aiohttp.ClientSession | None = None
         self._people_cache: dict[str, str] = {}  # person_id -> name
         self._users_cache: dict[str, str] = {}  # user_id -> name
-        self._shared_links_cache: dict[str, str] = {}  # album_id -> share_key
+        self._shared_links_cache: dict[str, list[SharedLinkInfo]] = {}  # album_id -> list of SharedLinkInfo
 
     @property
     def immich_url(self) -> str:
@@ -269,8 +317,8 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[dict[str, AlbumData]])
 
         return self._users_cache
 
-    async def _async_fetch_shared_links(self) -> dict[str, str]:
-        """Fetch shared links from Immich and cache album_id -> share_key mapping."""
+    async def _async_fetch_shared_links(self) -> dict[str, list[SharedLinkInfo]]:
+        """Fetch shared links from Immich and cache album_id -> SharedLinkInfo mapping."""
         if self._session is None:
             self._session = async_get_clientsession(self.hass)
 
@@ -285,22 +333,26 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[dict[str, AlbumData]])
                     _LOGGER.debug("Fetched %d shared links from Immich", len(data))
                     self._shared_links_cache.clear()
                     for link in data:
-                        # Only process album-type shared links
-                        link_type = link.get("type", "")
                         album = link.get("album")
                         key = link.get("key")
-                        _LOGGER.debug(
-                            "Shared link: type=%s, key=%s, album_id=%s",
-                            link_type,
-                            key[:8] if key else None,
-                            album.get("id") if album else None,
-                        )
                         if album and key:
                             album_id = album.get("id")
                             if album_id:
-                                self._shared_links_cache[album_id] = key
+                                link_info = SharedLinkInfo.from_api_response(link)
+                                _LOGGER.debug(
+                                    "Shared link: key=%s, album_id=%s, "
+                                    "has_password=%s, expired=%s, accessible=%s",
+                                    key[:8],
+                                    album_id[:8],
+                                    link_info.has_password,
+                                    link_info.is_expired,
+                                    link_info.is_accessible,
+                                )
+                                if album_id not in self._shared_links_cache:
+                                    self._shared_links_cache[album_id] = []
+                                self._shared_links_cache[album_id].append(link_info)
                     _LOGGER.debug(
-                        "Cached %d album shared links", len(self._shared_links_cache)
+                        "Cached shared links for %d albums", len(self._shared_links_cache)
                     )
                 else:
                     _LOGGER.warning(
@@ -311,18 +363,88 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[dict[str, AlbumData]])
 
         return self._shared_links_cache
 
+    def _get_accessible_links(self, album_id: str) -> list[SharedLinkInfo]:
+        """Get all accessible (no password, not expired) shared links for an album."""
+        all_links = self._shared_links_cache.get(album_id, [])
+        return [link for link in all_links if link.is_accessible]
+
+    def _get_non_expired_links(self, album_id: str) -> list[SharedLinkInfo]:
+        """Get all non-expired shared links for an album (including password-protected)."""
+        all_links = self._shared_links_cache.get(album_id, [])
+        return [link for link in all_links if not link.is_expired]
+
+    def _get_protected_only_links(self, album_id: str) -> list[SharedLinkInfo]:
+        """Get password-protected but not expired shared links for an album."""
+        all_links = self._shared_links_cache.get(album_id, [])
+        return [link for link in all_links if link.has_password and not link.is_expired]
+
     def get_album_public_url(self, album_id: str) -> str | None:
-        """Get the public URL for an album if it has a shared link."""
-        share_key = self._shared_links_cache.get(album_id)
-        if share_key:
-            return f"{self._url}/share/{share_key}"
+        """Get the public URL for an album if it has an accessible shared link."""
+        accessible_links = self._get_accessible_links(album_id)
+        if accessible_links:
+            return f"{self._url}/share/{accessible_links[0].key}"
         return None
 
+    def get_album_any_url(self, album_id: str) -> str | None:
+        """Get any non-expired URL for an album (prefers accessible, falls back to protected)."""
+        # First try accessible links
+        accessible_links = self._get_accessible_links(album_id)
+        if accessible_links:
+            return f"{self._url}/share/{accessible_links[0].key}"
+        # Fall back to any non-expired link (including password-protected)
+        non_expired = self._get_non_expired_links(album_id)
+        if non_expired:
+            return f"{self._url}/share/{non_expired[0].key}"
+        return None
+
+    def get_album_protected_url(self, album_id: str) -> str | None:
+        """Get a protected URL for an album if any password-protected link exists."""
+        protected_links = self._get_protected_only_links(album_id)
+        if protected_links:
+            return f"{self._url}/share/{protected_links[0].key}"
+        return None
+
+    def get_album_protected_urls(self, album_id: str) -> list[str]:
+        """Get all password-protected (but not expired) URLs for an album."""
+        protected_links = self._get_protected_only_links(album_id)
+        return [f"{self._url}/share/{link.key}" for link in protected_links]
+
+    def get_album_protected_password(self, album_id: str) -> str | None:
+        """Get the password for the first protected link (matches get_album_protected_url)."""
+        protected_links = self._get_protected_only_links(album_id)
+        if protected_links and protected_links[0].password:
+            return protected_links[0].password
+        return None
+
+    def get_album_public_urls(self, album_id: str) -> list[str]:
+        """Get all accessible public URLs for an album."""
+        accessible_links = self._get_accessible_links(album_id)
+        return [f"{self._url}/share/{link.key}" for link in accessible_links]
+
+    def get_album_shared_links_info(self, album_id: str) -> list[dict[str, Any]]:
+        """Get detailed info about all shared links for an album."""
+        all_links = self._shared_links_cache.get(album_id, [])
+        return [
+            {
+                "url": f"{self._url}/share/{link.key}",
+                "has_password": link.has_password,
+                "is_expired": link.is_expired,
+                "expires_at": link.expires_at.isoformat() if link.expires_at else None,
+                "is_accessible": link.is_accessible,
+            }
+            for link in all_links
+        ]
+
     def _get_asset_public_url(self, album_id: str, asset_id: str) -> str | None:
-        """Get the public URL for an asset if the album has a shared link."""
-        share_key = self._shared_links_cache.get(album_id)
-        if share_key:
-            return f"{self._url}/share/{share_key}/photos/{asset_id}"
+        """Get the public URL for an asset (prefers accessible, falls back to protected)."""
+        # First try accessible links
+        accessible_links = self._get_accessible_links(album_id)
+        if accessible_links:
+            return f"{self._url}/share/{accessible_links[0].key}/photos/{asset_id}"
+        # Fall back to any non-expired link
+        non_expired = self._get_non_expired_links(album_id)
+        if non_expired:
+            return f"{self._url}/share/{non_expired[0].key}/photos/{asset_id}"
         return None
 
     async def _async_update_data(self) -> dict[str, AlbumData]:
@@ -451,8 +573,8 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[dict[str, AlbumData]])
             ATTR_PEOPLE: list(album.people),
         }
 
-        # Add album public URL if it has a shared link
-        album_url = self.get_album_public_url(change.album_id)
+        # Add album URL if it has a shared link (prefers accessible, falls back to protected)
+        album_url = self.get_album_any_url(change.album_id)
         if album_url:
             event_data[ATTR_ALBUM_URL] = album_url
 
@@ -472,6 +594,57 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[dict[str, AlbumData]])
 
         if change.removed_count > 0:
             self.hass.bus.async_fire(EVENT_ASSETS_REMOVED, event_data)
+
+    def get_album_protected_link_id(self, album_id: str) -> str | None:
+        """Get the ID of the first protected link (matches get_album_protected_url)."""
+        protected_links = self._get_protected_only_links(album_id)
+        if protected_links:
+            return protected_links[0].id
+        return None
+
+    async def async_set_shared_link_password(
+        self, link_id: str, password: str | None
+    ) -> bool:
+        """Update the password for a shared link via Immich API.
+
+        Args:
+            link_id: The ID of the shared link to update.
+            password: The new password, or None/empty string to remove the password.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        if self._session is None:
+            self._session = async_get_clientsession(self.hass)
+
+        headers = {
+            "x-api-key": self._api_key,
+            "Content-Type": "application/json",
+        }
+
+        # Immich API expects null to remove password, or a string to set it
+        payload = {"password": password if password else None}
+
+        try:
+            async with self._session.patch(
+                f"{self._url}/api/shared-links/{link_id}",
+                headers=headers,
+                json=payload,
+            ) as response:
+                if response.status == 200:
+                    _LOGGER.info("Successfully updated shared link password")
+                    # Refresh shared links cache to reflect the change
+                    await self._async_fetch_shared_links()
+                    return True
+                else:
+                    _LOGGER.error(
+                        "Failed to update shared link password: HTTP %s",
+                        response.status,
+                    )
+                    return False
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Error updating shared link password: %s", err)
+            return False
 
     def clear_new_assets_flag(self, album_id: str) -> None:
         """Clear the new assets flag for an album."""

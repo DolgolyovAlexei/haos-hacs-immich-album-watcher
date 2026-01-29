@@ -24,6 +24,9 @@ EVENT_ASSETS_REMOVED: Final = f"{DOMAIN}_assets_removed"
 ATTR_ALBUM_ID: Final = "album_id"
 ATTR_ALBUM_NAME: Final = "album_name"
 ATTR_ALBUM_URL: Final = "album_url"
+ATTR_ALBUM_URLS: Final = "album_urls"
+ATTR_ALBUM_PROTECTED_URL: Final = "album_protected_url"
+ATTR_ALBUM_PROTECTED_PASSWORD: Final = "album_protected_password"
 ATTR_ASSET_COUNT: Final = "asset_count"
 ATTR_PHOTO_COUNT: Final = "photo_count"
 ATTR_VIDEO_COUNT: Final = "video_count"
@@ -50,7 +53,7 @@ ASSET_TYPE_IMAGE: Final = "IMAGE"
 ASSET_TYPE_VIDEO: Final = "VIDEO"
 
 # Platforms
-PLATFORMS: Final = ["sensor", "binary_sensor", "camera"]
+PLATFORMS: Final = ["sensor", "binary_sensor", "camera", "text"]
 
 # Services
 SERVICE_REFRESH: Final = "refresh"

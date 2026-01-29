@@ -43,9 +43,12 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
 | Sensor | People Count | Number of unique people detected |
 | Sensor | Last Updated | When the album was last modified |
 | Sensor | Created | When the album was created |
-| Sensor | Public URL | Public share link URL (if album is shared) |
+| Sensor | Public URL | Public share link URL (accessible links without password) |
+| Sensor | Protected URL | Password-protected share link URL (if any exist) |
+| Sensor | Protected Password | Password for the protected share link (read-only) |
 | Binary Sensor | New Assets | On when new assets were recently added |
 | Camera | Thumbnail | Album cover image |
+| Text | Share Password | Editable password for the protected share link |
 
 ## Installation
 
@@ -153,7 +156,20 @@ automation:
 
 - Home Assistant 2024.1.0 or newer
 - Immich server with API access
-- Valid Immich API key with `album.read` and `asset.read` permissions
+- Valid Immich API key with the following permissions:
+
+### Required API Permissions
+
+| Permission | Required | Description |
+| ---------- | -------- | ----------- |
+| `album.read` | Yes | Read album data and asset lists |
+| `asset.read` | Yes | Read asset details (type, filename, creation date) |
+| `user.read` | Yes | Resolve asset owner names |
+| `person.read` | Yes | Read face recognition / people data |
+| `sharedLink.read` | Yes | Read shared links for public/protected URL sensors |
+| `sharedLink.edit` | Optional | Edit shared link passwords via the Text entity |
+
+> **Note:** If you don't grant `sharedLink.edit` permission, the "Share Password" text entity will not be able to update passwords but will still display the current password.
 
 ## License
 

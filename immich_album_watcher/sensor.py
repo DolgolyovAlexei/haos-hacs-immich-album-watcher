@@ -19,7 +19,10 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     ATTR_ALBUM_ID,
+    ATTR_ALBUM_PROTECTED_PASSWORD,
+    ATTR_ALBUM_PROTECTED_URL,
     ATTR_ALBUM_URL,
+    ATTR_ALBUM_URLS,
     ATTR_ASSET_COUNT,
     ATTR_CREATED_AT,
     ATTR_LAST_UPDATED,
@@ -55,6 +58,8 @@ async def async_setup_entry(
         entities.append(ImmichAlbumCreatedSensor(coordinator, entry, album_id))
         entities.append(ImmichAlbumPeopleSensor(coordinator, entry, album_id))
         entities.append(ImmichAlbumPublicUrlSensor(coordinator, entry, album_id))
+        entities.append(ImmichAlbumProtectedUrlSensor(coordinator, entry, album_id))
+        entities.append(ImmichAlbumProtectedPasswordSensor(coordinator, entry, album_id))
 
     async_add_entities(entities)
 
@@ -336,7 +341,97 @@ class ImmichAlbumPublicUrlSensor(ImmichAlbumBaseSensor):
         if not self._album_data:
             return {}
 
-        return {
+        attrs = {
             ATTR_ALBUM_ID: self._album_data.id,
             ATTR_SHARED: self._album_data.shared,
+        }
+
+        # Include all accessible URLs if there are multiple
+        all_urls = self.coordinator.get_album_public_urls(self._album_id)
+        if len(all_urls) > 1:
+            attrs[ATTR_ALBUM_URLS] = all_urls
+
+        # Include detailed info about all shared links (including protected/expired)
+        links_info = self.coordinator.get_album_shared_links_info(self._album_id)
+        if links_info:
+            attrs["shared_links"] = links_info
+
+        return attrs
+
+
+class ImmichAlbumProtectedUrlSensor(ImmichAlbumBaseSensor):
+    """Sensor representing an Immich album password-protected URL."""
+
+    _attr_icon = "mdi:link-lock"
+    _attr_translation_key = "album_protected_url"
+
+    def __init__(
+        self,
+        coordinator: ImmichAlbumWatcherCoordinator,
+        entry: ConfigEntry,
+        album_id: str,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, album_id)
+        self._attr_unique_id = f"{entry.entry_id}_{album_id}_protected_url"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the state of the sensor (protected URL)."""
+        if self._album_data:
+            return self.coordinator.get_album_protected_url(self._album_id)
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        if not self._album_data:
+            return {}
+
+        attrs = {
+            ATTR_ALBUM_ID: self._album_data.id,
+        }
+
+        # Include all protected URLs if there are multiple
+        all_urls = self.coordinator.get_album_protected_urls(self._album_id)
+        if len(all_urls) > 1:
+            attrs["protected_urls"] = all_urls
+
+        return attrs
+
+
+class ImmichAlbumProtectedPasswordSensor(ImmichAlbumBaseSensor):
+    """Sensor representing an Immich album protected link password."""
+
+    _attr_icon = "mdi:key"
+    _attr_translation_key = "album_protected_password"
+
+    def __init__(
+        self,
+        coordinator: ImmichAlbumWatcherCoordinator,
+        entry: ConfigEntry,
+        album_id: str,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, album_id)
+        self._attr_unique_id = f"{entry.entry_id}_{album_id}_protected_password"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the state of the sensor (protected link password)."""
+        if self._album_data:
+            return self.coordinator.get_album_protected_password(self._album_id)
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        if not self._album_data:
+            return {}
+
+        return {
+            ATTR_ALBUM_ID: self._album_data.id,
+            ATTR_ALBUM_PROTECTED_URL: self.coordinator.get_album_protected_url(
+                self._album_id
+            ),
         }

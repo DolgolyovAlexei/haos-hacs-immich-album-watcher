@@ -21,6 +21,12 @@
             },
             "album_public_url": {
                 "name": "{album_name}: Public URL"
+            },
+            "album_protected_url": {
+                "name": "{album_name}: Protected URL"
+            },
+            "album_protected_password": {
+                "name": "{album_name}: Protected Password"
             }
         },
         "binary_sensor": {
@@ -31,6 +37,11 @@
         "camera": {
             "album_thumbnail": {
                 "name": "{album_name}: Thumbnail"
+            }
+        },
+        "text": {
+            "album_protected_password_edit": {
+                "name": "{album_name}: Share Password"
             }
         }
     },

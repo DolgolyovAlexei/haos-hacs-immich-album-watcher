@@ -21,6 +21,12 @@
             },
             "album_public_url": {
                 "name": "{album_name}: Публичная ссылка"
+            },
+            "album_protected_url": {
+                "name": "{album_name}: Защищённая ссылка"
+            },
+            "album_protected_password": {
+                "name": "{album_name}: Пароль ссылки"
             }
         },
         "binary_sensor": {
@@ -31,6 +37,11 @@
         "camera": {
             "album_thumbnail": {
                 "name": "{album_name}: Превью"
+            }
+        },
+        "text": {
+            "album_protected_password_edit": {
+                "name": "{album_name}: Пароль ссылки"
             }
         }
     },
