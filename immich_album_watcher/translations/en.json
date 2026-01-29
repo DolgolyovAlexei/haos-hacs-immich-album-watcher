@@ -18,6 +18,9 @@
             },
             "album_people_count": {
                 "name": "{album_name}: People Count"
+            },
+            "album_public_url": {
+                "name": "{album_name}: Public URL"
             }
         },
         "binary_sensor": {

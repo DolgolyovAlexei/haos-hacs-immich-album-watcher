@@ -23,6 +23,7 @@ EVENT_ASSETS_REMOVED: Final = f"{DOMAIN}_assets_removed"
 # Attributes
 ATTR_ALBUM_ID: Final = "album_id"
 ATTR_ALBUM_NAME: Final = "album_name"
+ATTR_ALBUM_URL: Final = "album_url"
 ATTR_ASSET_COUNT: Final = "asset_count"
 ATTR_PHOTO_COUNT: Final = "photo_count"
 ATTR_VIDEO_COUNT: Final = "video_count"
@@ -40,6 +41,9 @@ ATTR_PEOPLE: Final = "people"
 ATTR_ASSET_TYPE: Final = "asset_type"
 ATTR_ASSET_FILENAME: Final = "asset_filename"
 ATTR_ASSET_CREATED: Final = "asset_created"
+ATTR_ASSET_OWNER: Final = "asset_owner"
+ATTR_ASSET_OWNER_ID: Final = "asset_owner_id"
+ATTR_ASSET_URL: Final = "asset_url"
 
 # Asset types
 ASSET_TYPE_IMAGE: Final = "IMAGE"

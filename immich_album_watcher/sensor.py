@@ -19,6 +19,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     ATTR_ALBUM_ID,
+    ATTR_ALBUM_URL,
     ATTR_ASSET_COUNT,
     ATTR_CREATED_AT,
     ATTR_LAST_UPDATED,
@@ -53,6 +54,7 @@ async def async_setup_entry(
         entities.append(ImmichAlbumLastUpdatedSensor(coordinator, entry, album_id))
         entities.append(ImmichAlbumCreatedSensor(coordinator, entry, album_id))
         entities.append(ImmichAlbumPeopleSensor(coordinator, entry, album_id))
+        entities.append(ImmichAlbumPublicUrlSensor(coordinator, entry, album_id))
 
     async_add_entities(entities)
 
@@ -302,4 +304,39 @@ class ImmichAlbumPeopleSensor(ImmichAlbumBaseSensor):
 
         return {
             ATTR_PEOPLE: list(self._album_data.people),
+        }
+
+
+class ImmichAlbumPublicUrlSensor(ImmichAlbumBaseSensor):
+    """Sensor representing an Immich album public URL."""
+
+    _attr_icon = "mdi:link-variant"
+    _attr_translation_key = "album_public_url"
+
+    def __init__(
+        self,
+        coordinator: ImmichAlbumWatcherCoordinator,
+        entry: ConfigEntry,
+        album_id: str,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, album_id)
+        self._attr_unique_id = f"{entry.entry_id}_{album_id}_public_url"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the state of the sensor (public URL)."""
+        if self._album_data:
+            return self.coordinator.get_album_public_url(self._album_id)
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        if not self._album_data:
+            return {}
+
+        return {
+            ATTR_ALBUM_ID: self._album_data.id,
+            ATTR_SHARED: self._album_data.shared,
         }

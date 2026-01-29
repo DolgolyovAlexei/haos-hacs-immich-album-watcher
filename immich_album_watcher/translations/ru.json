@@ -18,6 +18,9 @@
             },
             "album_people_count": {
                 "name": "{album_name}: Число людей"
+            },
+            "album_public_url": {
+                "name": "{album_name}: Публичная ссылка"
             }
         },
         "binary_sensor": {

@@ -25,6 +25,8 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
   - Asset type (photo/video)
   - Filename
   - Creation date
+  - Asset owner (who uploaded the asset)
+  - Public URL (if album has a shared link)
   - Detected people in the asset
 - **Services** - Custom service calls:
   - `immich_album_watcher.refresh` - Force immediate data refresh
@@ -41,6 +43,7 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
 | Sensor | People Count | Number of unique people detected |
 | Sensor | Last Updated | When the album was last modified |
 | Sensor | Created | When the album was created |
+| Sensor | Public URL | Public share link URL (if album is shared) |
 | Binary Sensor | New Assets | On when new assets were recently added |
 | Camera | Thumbnail | Album cover image |
 
@@ -106,12 +109,45 @@ automation:
 |-------|-------------|
 | `album_id` | Album ID |
 | `album_name` | Album name |
+| `album_url` | Public URL to view the album (only present if album has a shared link) |
 | `change_type` | Type of change (assets_added, assets_removed, changed) |
 | `added_count` | Number of assets added |
 | `removed_count` | Number of assets removed |
-| `added_assets` | List of added assets with details (type, filename, created date, people) |
+| `added_assets` | List of added assets with details (see below) |
 | `removed_assets` | List of removed asset IDs |
 | `people` | List of all people detected in the album |
+
+### Added Assets Fields
+
+Each item in the `added_assets` list contains the following fields:
+
+| Field | Description |
+|-------|-------------|
+| `id` | Unique asset ID |
+| `asset_type` | Type of asset (`IMAGE` or `VIDEO`) |
+| `asset_filename` | Original filename of the asset |
+| `asset_created` | Date/time when the asset was originally created |
+| `asset_owner` | Display name of the user who owns the asset |
+| `asset_owner_id` | Unique ID of the user who owns the asset |
+| `asset_url` | Public URL to view the asset (only present if album has a shared link) |
+| `people` | List of people detected in this specific asset |
+
+Example accessing asset owner in an automation:
+
+```yaml
+automation:
+  - alias: "Notify when someone adds photos"
+    trigger:
+      - platform: event
+        event_type: immich_album_watcher_assets_added
+    action:
+      - service: notify.mobile_app
+        data:
+          title: "New Photos"
+          message: >
+            {{ trigger.event.data.added_assets[0].asset_owner }} added
+            {{ trigger.event.data.added_count }} photos to {{ trigger.event.data.album_name }}
+```
 
 ## Requirements
 

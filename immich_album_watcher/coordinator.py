@@ -20,9 +20,13 @@ from .const import (
     ATTR_ADDED_COUNT,
     ATTR_ALBUM_ID,
     ATTR_ALBUM_NAME,
+    ATTR_ALBUM_URL,
     ATTR_ASSET_CREATED,
     ATTR_ASSET_FILENAME,
+    ATTR_ASSET_OWNER,
+    ATTR_ASSET_OWNER_ID,
     ATTR_ASSET_TYPE,
+    ATTR_ASSET_URL,
     ATTR_CHANGE_TYPE,
     ATTR_PEOPLE,
     ATTR_REMOVED_ASSETS,
@@ -44,19 +48,31 @@ class AssetInfo:
     type: str  # IMAGE or VIDEO
     filename: str
     created_at: str
+    owner_id: str = ""
+    owner_name: str = ""
     people: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_api_response(cls, data: dict[str, Any]) -> AssetInfo:
+    def from_api_response(
+        cls, data: dict[str, Any], users_cache: dict[str, str] | None = None
+    ) -> AssetInfo:
         """Create AssetInfo from API response."""
         people = []
         if "people" in data:
             people = [p.get("name", "") for p in data["people"] if p.get("name")]
+
+        owner_id = data.get("ownerId", "")
+        owner_name = ""
+        if users_cache and owner_id:
+            owner_name = users_cache.get(owner_id, "")
+
         return cls(
             id=data["id"],
             type=data.get("type", ASSET_TYPE_IMAGE),
             filename=data.get("originalFileName", ""),
             created_at=data.get("fileCreatedAt", ""),
+            owner_id=owner_id,
+            owner_name=owner_name,
             people=people,
         )
 
@@ -82,7 +98,9 @@ class AlbumData:
     last_change_time: datetime | None = None
 
     @classmethod
-    def from_api_response(cls, data: dict[str, Any]) -> AlbumData:
+    def from_api_response(
+        cls, data: dict[str, Any], users_cache: dict[str, str] | None = None
+    ) -> AlbumData:
         """Create AlbumData from API response."""
         assets_data = data.get("assets", [])
         asset_ids = set()
@@ -92,7 +110,7 @@ class AlbumData:
         video_count = 0
 
         for asset_data in assets_data:
-            asset = AssetInfo.from_api_response(asset_data)
+            asset = AssetInfo.from_api_response(asset_data, users_cache)
             asset_ids.add(asset.id)
             assets[asset.id] = asset
             people.update(asset.people)
@@ -155,6 +173,8 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[dict[str, AlbumData]])
         self._previous_states: dict[str, AlbumData] = {}
         self._session: aiohttp.ClientSession | None = None
         self._people_cache: dict[str, str] = {}  # person_id -> name
+        self._users_cache: dict[str, str] = {}  # user_id -> name
+        self._shared_links_cache: dict[str, str] = {}  # album_id -> share_key
 
     @property
     def immich_url(self) -> str:
@@ -226,10 +246,96 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[dict[str, AlbumData]])
 
         return self._people_cache
 
+    async def _async_fetch_users(self) -> dict[str, str]:
+        """Fetch all users from Immich and cache them."""
+        if self._session is None:
+            self._session = async_get_clientsession(self.hass)
+
+        headers = {"x-api-key": self._api_key}
+        try:
+            async with self._session.get(
+                f"{self._url}/api/users",
+                headers=headers,
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    self._users_cache = {
+                        u["id"]: u.get("name", u.get("email", "Unknown"))
+                        for u in data
+                        if u.get("id")
+                    }
+        except aiohttp.ClientError as err:
+            _LOGGER.warning("Failed to fetch users: %s", err)
+
+        return self._users_cache
+
+    async def _async_fetch_shared_links(self) -> dict[str, str]:
+        """Fetch shared links from Immich and cache album_id -> share_key mapping."""
+        if self._session is None:
+            self._session = async_get_clientsession(self.hass)
+
+        headers = {"x-api-key": self._api_key}
+        try:
+            async with self._session.get(
+                f"{self._url}/api/shared-links",
+                headers=headers,
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    _LOGGER.debug("Fetched %d shared links from Immich", len(data))
+                    self._shared_links_cache.clear()
+                    for link in data:
+                        # Only process album-type shared links
+                        link_type = link.get("type", "")
+                        album = link.get("album")
+                        key = link.get("key")
+                        _LOGGER.debug(
+                            "Shared link: type=%s, key=%s, album_id=%s",
+                            link_type,
+                            key[:8] if key else None,
+                            album.get("id") if album else None,
+                        )
+                        if album and key:
+                            album_id = album.get("id")
+                            if album_id:
+                                self._shared_links_cache[album_id] = key
+                    _LOGGER.debug(
+                        "Cached %d album shared links", len(self._shared_links_cache)
+                    )
+                else:
+                    _LOGGER.warning(
+                        "Failed to fetch shared links: HTTP %s", response.status
+                    )
+        except aiohttp.ClientError as err:
+            _LOGGER.warning("Failed to fetch shared links: %s", err)
+
+        return self._shared_links_cache
+
+    def get_album_public_url(self, album_id: str) -> str | None:
+        """Get the public URL for an album if it has a shared link."""
+        share_key = self._shared_links_cache.get(album_id)
+        if share_key:
+            return f"{self._url}/share/{share_key}"
+        return None
+
+    def _get_asset_public_url(self, album_id: str, asset_id: str) -> str | None:
+        """Get the public URL for an asset if the album has a shared link."""
+        share_key = self._shared_links_cache.get(album_id)
+        if share_key:
+            return f"{self._url}/share/{share_key}/photos/{asset_id}"
+        return None
+
     async def _async_update_data(self) -> dict[str, AlbumData]:
         """Fetch data from Immich API."""
         if self._session is None:
             self._session = async_get_clientsession(self.hass)
+
+        # Fetch users to resolve owner names
+        if not self._users_cache:
+            await self._async_fetch_users()
+
+        # Fetch shared links to resolve public URLs (refresh each time as links can change)
+        await self._async_fetch_shared_links()
 
         headers = {"x-api-key": self._api_key}
         albums_data: dict[str, AlbumData] = {}
@@ -249,7 +355,7 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[dict[str, AlbumData]])
                         )
 
                     data = await response.json()
-                    album = AlbumData.from_api_response(data)
+                    album = AlbumData.from_api_response(data, self._users_cache)
 
                     # Detect changes and update flags
                     if album_id in self._previous_states:
@@ -317,16 +423,22 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[dict[str, AlbumData]])
     def _fire_events(self, change: AlbumChange, album: AlbumData) -> None:
         """Fire Home Assistant events for album changes."""
         # Build detailed asset info for events
-        added_assets_detail = [
-            {
+        added_assets_detail = []
+        for asset in change.added_assets:
+            asset_detail = {
                 "id": asset.id,
                 ATTR_ASSET_TYPE: asset.type,
                 ATTR_ASSET_FILENAME: asset.filename,
                 ATTR_ASSET_CREATED: asset.created_at,
+                ATTR_ASSET_OWNER: asset.owner_name,
+                ATTR_ASSET_OWNER_ID: asset.owner_id,
                 ATTR_PEOPLE: asset.people,
             }
-            for asset in change.added_assets
-        ]
+            # Add public URL if album has a shared link
+            asset_url = self._get_asset_public_url(change.album_id, asset.id)
+            if asset_url:
+                asset_detail[ATTR_ASSET_URL] = asset_url
+            added_assets_detail.append(asset_detail)
 
         event_data = {
             ATTR_ALBUM_ID: change.album_id,
@@ -338,6 +450,11 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[dict[str, AlbumData]])
             ATTR_REMOVED_ASSETS: change.removed_asset_ids,
             ATTR_PEOPLE: list(album.people),
         }
+
+        # Add album public URL if it has a shared link
+        album_url = self.get_album_public_url(change.album_id)
+        if album_url:
+            event_data[ATTR_ALBUM_URL] = album_url
 
         # Fire general change event
         self.hass.bus.async_fire(EVENT_ALBUM_CHANGED, event_data)
