@@ -190,7 +190,9 @@ class ImmichAlbumIdSensor(ImmichAlbumBaseSensor):
         if not self._album_data:
             return {}
 
-        attrs: dict[str, Any] = {}
+        attrs: dict[str, Any] = {
+            "album_name": self._album_data.name,
+        }
 
         # Primary share URL (prefers public, falls back to protected)
         share_url = self.coordinator.get_any_url()
