@@ -68,7 +68,6 @@ async def async_setup_entry(
             ImmichAlbumVideoCountSensor(coordinator, entry, subentry),
             ImmichAlbumLastUpdatedSensor(coordinator, entry, subentry),
             ImmichAlbumCreatedSensor(coordinator, entry, subentry),
-            ImmichAlbumPeopleSensor(coordinator, entry, subentry),
             ImmichAlbumPublicUrlSensor(coordinator, entry, subentry),
             ImmichAlbumProtectedUrlSensor(coordinator, entry, subentry),
             ImmichAlbumProtectedPasswordSensor(coordinator, entry, subentry),
@@ -320,41 +319,6 @@ class ImmichAlbumCreatedSensor(ImmichAlbumBaseSensor):
             except ValueError:
                 return None
         return None
-
-
-class ImmichAlbumPeopleSensor(ImmichAlbumBaseSensor):
-    """Sensor representing people detected in an Immich album."""
-
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:account-group"
-    _attr_translation_key = "album_people_count"
-
-    def __init__(
-        self,
-        coordinator: ImmichAlbumWatcherCoordinator,
-        entry: ConfigEntry,
-        subentry: ConfigSubentry,
-    ) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator, entry, subentry)
-        self._attr_unique_id = f"{self._unique_id_prefix}_people_count"
-
-    @property
-    def native_value(self) -> int | None:
-        """Return the state of the sensor (number of unique people)."""
-        if self._album_data:
-            return len(self._album_data.people)
-        return None
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
-        if not self._album_data:
-            return {}
-
-        return {
-            ATTR_PEOPLE: list(self._album_data.people),
-        }
 
 
 class ImmichAlbumPublicUrlSensor(ImmichAlbumBaseSensor):

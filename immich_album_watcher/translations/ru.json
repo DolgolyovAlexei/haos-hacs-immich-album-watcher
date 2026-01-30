@@ -16,9 +16,6 @@
             "album_created": {
                 "name": "{album_name}: Дата создания"
             },
-            "album_people_count": {
-                "name": "{album_name}: Число людей"
-            },
             "album_public_url": {
                 "name": "{album_name}: Публичная ссылка"
             },
@@ -42,6 +39,20 @@
         "text": {
             "album_protected_password_edit": {
                 "name": "{album_name}: Пароль ссылки"
+            }
+        },
+        "button": {
+            "create_share_link": {
+                "name": "{album_name}: Создать ссылку"
+            },
+            "delete_share_link": {
+                "name": "{album_name}: Удалить ссылку"
+            },
+            "create_protected_link": {
+                "name": "{album_name}: Создать защищённую ссылку"
+            },
+            "delete_protected_link": {
+                "name": "{album_name}: Удалить защищённую ссылку"
             }
         }
     },

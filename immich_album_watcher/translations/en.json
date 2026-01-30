@@ -16,9 +16,6 @@
             "album_created": {
                 "name": "{album_name}: Created"
             },
-            "album_people_count": {
-                "name": "{album_name}: People Count"
-            },
             "album_public_url": {
                 "name": "{album_name}: Public URL"
             },
@@ -42,6 +39,20 @@
         "text": {
             "album_protected_password_edit": {
                 "name": "{album_name}: Share Password"
+            }
+        },
+        "button": {
+            "create_share_link": {
+                "name": "{album_name}: Create Share Link"
+            },
+            "delete_share_link": {
+                "name": "{album_name}: Delete Share Link"
+            },
+            "create_protected_link": {
+                "name": "{album_name}: Create Protected Link"
+            },
+            "delete_protected_link": {
+                "name": "{album_name}: Delete Protected Link"
             }
         }
     },

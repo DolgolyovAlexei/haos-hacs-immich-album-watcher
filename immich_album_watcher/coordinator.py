@@ -621,3 +621,92 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
         if self.data:
             self.data.has_new_assets = False
             self.data.last_change_time = None
+
+    def has_unprotected_link(self) -> bool:
+        """Check if album has an unprotected (accessible) shared link."""
+        return len(self._get_accessible_links()) > 0
+
+    def has_protected_link(self) -> bool:
+        """Check if album has a protected (password) shared link."""
+        return len(self._get_protected_links()) > 0
+
+    def get_unprotected_link_id(self) -> str | None:
+        """Get the ID of the first unprotected link."""
+        accessible_links = self._get_accessible_links()
+        if accessible_links:
+            return accessible_links[0].id
+        return None
+
+    async def async_create_shared_link(self, password: str | None = None) -> bool:
+        """Create a new shared link for the album via Immich API."""
+        if self._session is None:
+            self._session = async_get_clientsession(self.hass)
+
+        headers = {
+            "x-api-key": self._api_key,
+            "Content-Type": "application/json",
+        }
+
+        payload: dict[str, Any] = {
+            "albumId": self._album_id,
+            "type": "ALBUM",
+            "allowDownload": True,
+            "allowUpload": False,
+            "showMetadata": True,
+        }
+
+        if password:
+            payload["password"] = password
+
+        try:
+            async with self._session.post(
+                f"{self._url}/api/shared-links",
+                headers=headers,
+                json=payload,
+            ) as response:
+                if response.status == 201:
+                    _LOGGER.info(
+                        "Successfully created shared link for album %s",
+                        self._album_name,
+                    )
+                    await self._async_fetch_shared_links()
+                    return True
+                else:
+                    error_text = await response.text()
+                    _LOGGER.error(
+                        "Failed to create shared link: HTTP %s - %s",
+                        response.status,
+                        error_text,
+                    )
+                    return False
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Error creating shared link: %s", err)
+            return False
+
+    async def async_delete_shared_link(self, link_id: str) -> bool:
+        """Delete a shared link via Immich API."""
+        if self._session is None:
+            self._session = async_get_clientsession(self.hass)
+
+        headers = {"x-api-key": self._api_key}
+
+        try:
+            async with self._session.delete(
+                f"{self._url}/api/shared-links/{link_id}",
+                headers=headers,
+            ) as response:
+                if response.status == 200:
+                    _LOGGER.info("Successfully deleted shared link")
+                    await self._async_fetch_shared_links()
+                    return True
+                else:
+                    error_text = await response.text()
+                    _LOGGER.error(
+                        "Failed to delete shared link: HTTP %s - %s",
+                        response.status,
+                        error_text,
+                    )
+                    return False
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Error deleting shared link: %s", err)
+            return False

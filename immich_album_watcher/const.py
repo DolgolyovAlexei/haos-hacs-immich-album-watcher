@@ -20,6 +20,7 @@ SUBENTRY_TYPE_ALBUM: Final = "album"
 # Defaults
 DEFAULT_SCAN_INTERVAL: Final = 60  # seconds
 NEW_ASSETS_RESET_DELAY: Final = 300  # 5 minutes
+DEFAULT_SHARE_PASSWORD: Final = "immich123"
 
 # Events
 EVENT_ALBUM_CHANGED: Final = f"{DOMAIN}_album_changed"
@@ -61,7 +62,7 @@ ASSET_TYPE_IMAGE: Final = "IMAGE"
 ASSET_TYPE_VIDEO: Final = "VIDEO"
 
 # Platforms
-PLATFORMS: Final = ["sensor", "binary_sensor", "camera", "text"]
+PLATFORMS: Final = ["sensor", "binary_sensor", "camera", "text", "button"]
 
 # Services
 SERVICE_REFRESH: Final = "refresh"
