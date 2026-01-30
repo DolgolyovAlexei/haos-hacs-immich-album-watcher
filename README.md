@@ -22,6 +22,8 @@ A collection of custom integrations for Home Assistant.
 8. Restart Home Assistant
 9. Add the integration via **Settings** → **Devices & Services** → **Add Integration**
 
+> **Tip:** For the best experience, use this integration with the [Immich Album Watcher Blueprint](https://github.com/DolgolyovAlexei/haos-blueprints/blob/main/Common/Immich%20Album%20Watcher.yaml) to easily create automations for album change notifications.
+
 ### Manual Installation
 
 1. Download or clone this repository

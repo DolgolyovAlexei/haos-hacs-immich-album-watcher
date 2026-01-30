@@ -60,6 +60,8 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
 5. Enter your Immich server URL and API key
 6. Select the albums you want to monitor
 
+> **Tip:** For the best experience, use this integration with the [Immich Album Watcher Blueprint](https://github.com/DolgolyovAlexei/haos-blueprints/blob/main/Common/Immich%20Album%20Watcher.yaml) to easily create automations for album change notifications.
+
 ## Configuration
 
 | Option | Description | Default |
