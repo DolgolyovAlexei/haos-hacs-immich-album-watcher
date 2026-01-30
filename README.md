@@ -8,10 +8,10 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
 
 - **Album Monitoring** - Watch selected Immich albums for asset additions and removals
 - **Rich Sensor Data** - Multiple sensors per album:
-  - Asset count (total)
+  - Album ID (with share URL attribute)
+  - Asset count (with detected people list)
   - Photo count
   - Video count
-  - People count (detected faces)
   - Last updated timestamp
   - Creation date
 - **Camera Entity** - Album thumbnail displayed as a camera entity for dashboards
@@ -32,6 +32,10 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
 - **Services** - Custom service calls:
   - `immich_album_watcher.refresh` - Force immediate data refresh
   - `immich_album_watcher.get_recent_assets` - Get recent assets from an album
+- **Share Link Management** - Button entities to create and delete share links:
+  - Create/delete public (unprotected) share links
+  - Create/delete password-protected share links
+  - Edit protected link passwords via Text entity
 - **Configurable Polling** - Adjustable scan interval (10-3600 seconds)
 
 ## Installation
@@ -70,10 +74,10 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
 
 | Entity Type | Name | Description |
 |-------------|------|-------------|
-| Sensor | Asset Count | Total number of assets in the album |
+| Sensor | Album ID | Album identifier with `album_name` and `share_url` attributes |
+| Sensor | Asset Count | Total number of assets (includes `people` list in attributes) |
 | Sensor | Photo Count | Number of photos in the album |
 | Sensor | Video Count | Number of videos in the album |
-| Sensor | People Count | Number of unique people detected |
 | Sensor | Last Updated | When the album was last modified |
 | Sensor | Created | When the album was created |
 | Sensor | Public URL | Public share link URL (accessible links without password) |
@@ -81,7 +85,11 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
 | Sensor | Protected Password | Password for the protected share link (read-only) |
 | Binary Sensor | New Assets | On when new assets were recently added |
 | Camera | Thumbnail | Album cover image |
-| Text | Share Password | Editable password for the protected share link |
+| Text | Protected Password | Editable password for the protected share link |
+| Button | Create Share Link | Creates an unprotected public share link |
+| Button | Delete Share Link | Deletes the unprotected public share link |
+| Button | Create Protected Link | Creates a password-protected share link |
+| Button | Delete Protected Link | Deletes the password-protected share link |
 
 ## Services
 
@@ -183,9 +191,11 @@ automation:
 | `user.read` | Yes | Resolve asset owner names |
 | `person.read` | Yes | Read face recognition / people data |
 | `sharedLink.read` | Yes | Read shared links for public/protected URL sensors |
+| `sharedLink.create` | Optional | Create share links via the Button entities |
 | `sharedLink.edit` | Optional | Edit shared link passwords via the Text entity |
+| `sharedLink.delete` | Optional | Delete share links via the Button entities |
 
-> **Note:** If you don't grant `sharedLink.edit` permission, the "Share Password" text entity will not be able to update passwords but will still display the current password.
+> **Note:** Without optional permissions, the corresponding entities will be unavailable or non-functional.
 
 ## Contributing
 
