@@ -29,6 +29,7 @@ from .const import (
     ATTR_ASSET_OWNER_ID,
     ATTR_ASSET_TYPE,
     ATTR_ASSET_URL,
+    ATTR_ASSET_PLAYBACK_URL,
     ATTR_CHANGE_TYPE,
     ATTR_HUB_NAME,
     ATTR_PEOPLE,
@@ -279,8 +280,9 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
             reverse=True,
         )[:count]
 
-        return [
-            {
+        result = []
+        for asset in sorted_assets:
+            asset_data = {
                 "id": asset.id,
                 "type": asset.type,
                 "filename": asset.filename,
@@ -289,8 +291,12 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
                 "people": asset.people,
                 "thumbnail_url": f"{self._url}/api/assets/{asset.id}/thumbnail",
             }
-            for asset in sorted_assets
-        ]
+            if asset.type == ASSET_TYPE_VIDEO:
+                video_url = self._get_asset_video_url(asset.id)
+                if video_url:
+                    asset_data["video_url"] = video_url
+            result.append(asset_data)
+        return result
 
     async def async_fetch_people(self) -> dict[str, str]:
         """Fetch all people from Immich."""
@@ -450,6 +456,16 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
             return f"{self._url}/api/assets/{asset_id}/original?key={non_expired[0].key}"
         return None
 
+    def _get_asset_video_url(self, asset_id: str) -> str | None:
+        """Get the transcoded video playback URL for a video asset."""
+        accessible_links = self._get_accessible_links()
+        if accessible_links:
+            return f"{self._url}/api/assets/{asset_id}/video/playback?key={accessible_links[0].key}"
+        non_expired = [link for link in self._shared_links if not link.is_expired]
+        if non_expired:
+            return f"{self._url}/api/assets/{asset_id}/video/playback?key={non_expired[0].key}"
+        return None
+
     async def _async_update_data(self) -> AlbumData | None:
         """Fetch data from Immich API."""
         if self._session is None:
@@ -556,6 +572,10 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
             asset_download_url = self._get_asset_download_url(asset.id)
             if asset_download_url:
                 asset_detail[ATTR_ASSET_DOWNLOAD_URL] = asset_download_url
+            if asset.type == ASSET_TYPE_VIDEO:
+                asset_video_url = self._get_asset_video_url(asset.id)
+                if asset_video_url:
+                    asset_detail[ATTR_ASSET_PLAYBACK_URL] = asset_video_url
             added_assets_detail.append(asset_detail)
 
         event_data = {

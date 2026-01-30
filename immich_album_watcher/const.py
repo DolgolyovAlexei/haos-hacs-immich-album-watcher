@@ -56,6 +56,7 @@ ATTR_ASSET_OWNER: Final = "asset_owner"
 ATTR_ASSET_OWNER_ID: Final = "asset_owner_id"
 ATTR_ASSET_URL: Final = "asset_url"
 ATTR_ASSET_DOWNLOAD_URL: Final = "asset_download_url"
+ATTR_ASSET_PLAYBACK_URL: Final = "asset_playback_url"
 ATTR_ASSET_DESCRIPTION: Final = "asset_description"
 
 # Asset types
