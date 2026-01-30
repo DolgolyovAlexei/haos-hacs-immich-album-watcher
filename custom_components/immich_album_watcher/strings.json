@@ -1,6 +1,9 @@
 {
     "entity": {
         "sensor": {
+            "album_id": {
+                "name": "{album_name}: Album ID"
+            },
             "album_asset_count": {
                 "name": "{album_name}: Asset Count"
             },

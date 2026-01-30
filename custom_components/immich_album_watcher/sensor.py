@@ -63,6 +63,7 @@ async def async_setup_entry(
         coordinator = subentry_data.coordinator
 
         entities: list[SensorEntity] = [
+            ImmichAlbumIdSensor(coordinator, entry, subentry),
             ImmichAlbumAssetCountSensor(coordinator, entry, subentry),
             ImmichAlbumPhotoCountSensor(coordinator, entry, subentry),
             ImmichAlbumVideoCountSensor(coordinator, entry, subentry),
@@ -158,6 +159,45 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         """Get recent assets for this album."""
         assets = await self.coordinator.async_get_recent_assets(count)
         return {"assets": assets}
+
+
+class ImmichAlbumIdSensor(ImmichAlbumBaseSensor):
+    """Sensor exposing the Immich album ID."""
+
+    _attr_icon = "mdi:identifier"
+    _attr_translation_key = "album_id"
+
+    def __init__(
+        self,
+        coordinator: ImmichAlbumWatcherCoordinator,
+        entry: ConfigEntry,
+        subentry: ConfigSubentry,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, subentry)
+        self._attr_unique_id = f"{self._unique_id_prefix}_album_id"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the album ID."""
+        if self._album_data:
+            return self._album_data.id
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        if not self._album_data:
+            return {}
+
+        attrs: dict[str, Any] = {}
+
+        # Primary share URL (prefers public, falls back to protected)
+        share_url = self.coordinator.get_any_url()
+        if share_url:
+            attrs["share_url"] = share_url
+
+        return attrs
 
 
 class ImmichAlbumAssetCountSensor(ImmichAlbumBaseSensor):
