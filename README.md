@@ -1,12 +1,8 @@
-# HAOS Integrations
+# Immich Album Watcher
 
-A collection of custom integrations for Home Assistant.
+A custom Home Assistant integration to monitor Immich albums for changes with sensors, events, and face recognition.
 
-## Available Integrations
-
-| Integration | Description | Documentation |
-|-------------|-------------|---------------|
-| [Immich Album Watcher](custom_components/immich_album_watcher/) | Monitor Immich albums for changes with sensors, events, and face recognition | [README](custom_components/immich_album_watcher/README.md) |
+For detailed documentation, see the [integration README](custom_components/immich_album_watcher/README.md).
 
 ## Installation
 
