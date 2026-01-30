@@ -20,6 +20,7 @@ from .const import (
     PLATFORMS,
 )
 from .coordinator import ImmichAlbumWatcherCoordinator
+from .storage import ImmichAlbumStorage
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,10 +64,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ImmichConfigEntry) -> bo
         scan_interval=scan_interval,
     )
 
+    # Create storage for persisting album state across restarts
+    storage = ImmichAlbumStorage(hass, entry.entry_id)
+    await storage.async_load()
+
     # Store hub reference
     hass.data[DOMAIN][entry.entry_id] = {
         "hub": entry.runtime_data,
         "subentries": {},
+        "storage": storage,
     }
 
     # Track loaded subentries to detect changes
@@ -97,6 +103,7 @@ async def _async_setup_subentry_coordinator(
     hub_data: ImmichHubData = entry.runtime_data
     album_id = subentry.data[CONF_ALBUM_ID]
     album_name = subentry.data.get(CONF_ALBUM_NAME, "Unknown Album")
+    storage: ImmichAlbumStorage = hass.data[DOMAIN][entry.entry_id]["storage"]
 
     _LOGGER.debug("Setting up coordinator for album: %s (%s)", album_name, album_id)
 
@@ -109,7 +116,11 @@ async def _async_setup_subentry_coordinator(
         album_name=album_name,
         scan_interval=hub_data.scan_interval,
         hub_name=hub_data.name,
+        storage=storage,
     )
+
+    # Load persisted state before first refresh to detect changes during downtime
+    await coordinator.async_load_persisted_state()
 
     # Fetch initial data
     await coordinator.async_config_entry_first_refresh()

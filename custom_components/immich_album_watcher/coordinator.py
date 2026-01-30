@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .storage import ImmichAlbumStorage
 
 import aiohttp
 
@@ -221,6 +224,7 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
         album_name: str,
         scan_interval: int,
         hub_name: str = "Immich",
+        storage: ImmichAlbumStorage | None = None,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -239,6 +243,8 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
         self._people_cache: dict[str, str] = {}  # person_id -> name
         self._users_cache: dict[str, str] = {}  # user_id -> name
         self._shared_links: list[SharedLinkInfo] = []
+        self._storage = storage
+        self._persisted_asset_ids: set[str] | None = None
 
     @property
     def immich_url(self) -> str:
@@ -267,6 +273,23 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
     async def async_refresh_now(self) -> None:
         """Force an immediate refresh."""
         await self.async_request_refresh()
+
+    async def async_load_persisted_state(self) -> None:
+        """Load persisted asset IDs from storage.
+
+        This should be called before the first refresh to enable
+        detection of changes that occurred during downtime.
+        """
+        if self._storage:
+            self._persisted_asset_ids = self._storage.get_album_asset_ids(
+                self._album_id
+            )
+            if self._persisted_asset_ids is not None:
+                _LOGGER.debug(
+                    "Loaded %d persisted asset IDs for album '%s'",
+                    len(self._persisted_asset_ids),
+                    self._album_name,
+                )
 
     async def async_get_recent_assets(self, count: int = 10) -> list[dict[str, Any]]:
         """Get recent assets from the album."""
@@ -503,6 +526,47 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
                         album.has_new_assets = change.added_count > 0
                         album.last_change_time = datetime.now()
                         self._fire_events(change, album)
+                elif self._persisted_asset_ids is not None:
+                    # First refresh after restart - compare with persisted state
+                    added_ids = album.asset_ids - self._persisted_asset_ids
+                    removed_ids = self._persisted_asset_ids - album.asset_ids
+
+                    if added_ids or removed_ids:
+                        change_type = "changed"
+                        if added_ids and not removed_ids:
+                            change_type = "assets_added"
+                        elif removed_ids and not added_ids:
+                            change_type = "assets_removed"
+
+                        added_assets = [
+                            album.assets[aid]
+                            for aid in added_ids
+                            if aid in album.assets
+                        ]
+
+                        change = AlbumChange(
+                            album_id=album.id,
+                            album_name=album.name,
+                            change_type=change_type,
+                            added_count=len(added_ids),
+                            removed_count=len(removed_ids),
+                            added_assets=added_assets,
+                            removed_asset_ids=list(removed_ids),
+                        )
+                        album.has_new_assets = change.added_count > 0
+                        album.last_change_time = datetime.now()
+                        self._fire_events(change, album)
+                        _LOGGER.info(
+                            "Detected changes during downtime for album '%s': +%d -%d",
+                            album.name,
+                            len(added_ids),
+                            len(removed_ids),
+                        )
+                    else:
+                        album.has_new_assets = False
+
+                    # Clear persisted state after first comparison
+                    self._persisted_asset_ids = None
                 else:
                     album.has_new_assets = False
 
@@ -516,6 +580,12 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
 
                 # Update previous state
                 self._previous_state = album
+
+                # Persist current state for recovery after restart
+                if self._storage:
+                    await self._storage.async_save_album_state(
+                        self._album_id, album.asset_ids
+                    )
 
                 return album
 
