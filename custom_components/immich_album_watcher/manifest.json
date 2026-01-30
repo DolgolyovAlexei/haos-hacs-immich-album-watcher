@@ -1,0 +1,12 @@
+{
+    "domain": "immich_album_watcher",
+    "name": "Immich Album Watcher",
+    "codeowners": ["@alexei.dolgolyov"],
+    "config_flow": true,
+    "dependencies": [],
+    "documentation": "https://git.dolgolyov-family.by/alexei.dolgolyov/haos-integrations",
+    "iot_class": "cloud_polling",
+    "issue_tracker": "https://git.dolgolyov-family.by/alexei.dolgolyov/haos-integrations/issues",
+    "requirements": [],
+    "version": "1.2.0"
+}

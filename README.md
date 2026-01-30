@@ -6,24 +6,28 @@ A collection of custom integrations for Home Assistant.
 
 | Integration | Description | Documentation |
 |-------------|-------------|---------------|
-| [Immich Album Watcher](immich_album_watcher/) | Monitor Immich albums for changes with sensors, events, and face recognition | [README](immich_album_watcher/README.md) |
+| [Immich Album Watcher](custom_components/immich_album_watcher/) | Monitor Immich albums for changes with sensors, events, and face recognition | [README](custom_components/immich_album_watcher/README.md) |
 
 ## Installation
+
+### HACS Installation (Recommended)
+
+1. Open HACS in Home Assistant
+2. Click on the three dots in the top right corner
+3. Select **Custom repositories**
+4. Add this repository URL: `https://git.dolgolyov-family.by/alexei.dolgolyov/haos-integrations`
+5. Select **Integration** as the category
+6. Click **Add**
+7. Search for "Immich Album Watcher" in HACS and install it
+8. Restart Home Assistant
+9. Add the integration via **Settings** → **Devices & Services** → **Add Integration**
 
 ### Manual Installation
 
 1. Download or clone this repository
-2. Copy the desired integration folder (e.g., `immich_album_watcher`) to your Home Assistant `custom_components` directory
+2. Copy the `custom_components/immich_album_watcher` folder to your Home Assistant `config/custom_components` directory
 3. Restart Home Assistant
 4. Add the integration via **Settings** → **Devices & Services** → **Add Integration**
-
-### HACS Installation
-
-1. Open HACS in Home Assistant
-2. Go to **Integrations** → **Custom repositories**
-3. Add this repository URL
-4. Install the desired integration
-5. Restart Home Assistant
 
 ## Contributing
 
