@@ -12,11 +12,20 @@ jobs:
     name: Hassfest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout integration
+        uses: actions/checkout@v4
+        with:
+          path: integration
+      - name: Checkout Home Assistant core
+        uses: actions/checkout@v4
+        with:
+          repository: home-assistant/core
+          path: core
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install Home Assistant
-        run: pip install homeassistant
+      - name: Install dependencies
+        run: pip install -r core/requirements.txt
       - name: Run hassfest
-        run: python -m script.hassfest --integration-path="${{ github.workspace }}/custom_components/immich_album_watcher" --action=validate
+        run: python -m script.hassfest --integration-path="${{ github.workspace }}/integration/custom_components/immich_album_watcher" --action=validate
+        working-directory: core
