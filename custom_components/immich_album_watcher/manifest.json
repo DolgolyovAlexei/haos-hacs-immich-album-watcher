@@ -4,9 +4,9 @@
     "codeowners": ["@alexei.dolgolyov"],
     "config_flow": true,
     "dependencies": [],
-    "documentation": "https://git.dolgolyov-family.by/alexei.dolgolyov/haos-hacs-immich-album-watcher",
+    "documentation": "https://github.com/DolgolyovAlexei/haos-hacs-immich-album-watcher",
     "iot_class": "cloud_polling",
-    "issue_tracker": "https://git.dolgolyov-family.by/alexei.dolgolyov/haos-hacs-immich-album-watcher/issues",
+    "issue_tracker": "https://github.com/DolgolyovAlexei/haos-hacs-immich-album-watcher/issues",
     "requirements": [],
     "version": "1.2.0"
 }

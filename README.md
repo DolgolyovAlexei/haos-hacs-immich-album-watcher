@@ -15,7 +15,7 @@ A collection of custom integrations for Home Assistant.
 1. Open HACS in Home Assistant
 2. Click on the three dots in the top right corner
 3. Select **Custom repositories**
-4. Add this repository URL: `https://git.dolgolyov-family.by/alexei.dolgolyov/haos-hacs-immich-album-watcher`
+4. Add this repository URL: `https://github.com/DolgolyovAlexei/haos-hacs-immich-album-watcher`
 5. Select **Integration** as the category
 6. Click **Add**
 7. Search for "Immich Album Watcher" in HACS and install it
