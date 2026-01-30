@@ -23,6 +23,7 @@ from .const import (
     ATTR_ALBUM_URL,
     ATTR_ASSET_CREATED,
     ATTR_ASSET_DESCRIPTION,
+    ATTR_ASSET_DOWNLOAD_URL,
     ATTR_ASSET_FILENAME,
     ATTR_ASSET_OWNER,
     ATTR_ASSET_OWNER_ID,
@@ -430,13 +431,23 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
         ]
 
     def _get_asset_public_url(self, asset_id: str) -> str | None:
-        """Get the public URL for an asset."""
+        """Get the public viewer URL for an asset (web page)."""
         accessible_links = self._get_accessible_links()
         if accessible_links:
             return f"{self._url}/share/{accessible_links[0].key}/photos/{asset_id}"
         non_expired = [link for link in self._shared_links if not link.is_expired]
         if non_expired:
             return f"{self._url}/share/{non_expired[0].key}/photos/{asset_id}"
+        return None
+
+    def _get_asset_download_url(self, asset_id: str) -> str | None:
+        """Get the direct download URL for an asset (media file)."""
+        accessible_links = self._get_accessible_links()
+        if accessible_links:
+            return f"{self._url}/api/assets/{asset_id}/original?key={accessible_links[0].key}"
+        non_expired = [link for link in self._shared_links if not link.is_expired]
+        if non_expired:
+            return f"{self._url}/api/assets/{asset_id}/original?key={non_expired[0].key}"
         return None
 
     async def _async_update_data(self) -> AlbumData | None:
@@ -542,6 +553,9 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
             asset_url = self._get_asset_public_url(asset.id)
             if asset_url:
                 asset_detail[ATTR_ASSET_URL] = asset_url
+            asset_download_url = self._get_asset_download_url(asset.id)
+            if asset_download_url:
+                asset_detail[ATTR_ASSET_DOWNLOAD_URL] = asset_download_url
             added_assets_detail.append(asset_detail)
 
         event_data = {
