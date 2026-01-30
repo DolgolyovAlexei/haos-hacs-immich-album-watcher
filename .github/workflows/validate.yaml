@@ -14,3 +14,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: home-assistant/actions/hassfest@master
+        if: github.server_url == 'https://github.com'
