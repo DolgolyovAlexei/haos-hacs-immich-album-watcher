@@ -13,6 +13,7 @@ CONF_ALBUMS: Final = "albums"
 CONF_ALBUM_ID: Final = "album_id"
 CONF_ALBUM_NAME: Final = "album_name"
 CONF_SCAN_INTERVAL: Final = "scan_interval"
+CONF_TELEGRAM_BOT_TOKEN: Final = "telegram_bot_token"
 
 # Subentry type
 SUBENTRY_TYPE_ALBUM: Final = "album"
@@ -69,3 +70,4 @@ PLATFORMS: Final = ["sensor", "binary_sensor", "camera", "text", "button"]
 # Services
 SERVICE_REFRESH: Final = "refresh"
 SERVICE_GET_RECENT_ASSETS: Final = "get_recent_assets"
+SERVICE_SEND_TELEGRAM_MEDIA_GROUP: Final = "send_telegram_media_group"

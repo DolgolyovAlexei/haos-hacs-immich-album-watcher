@@ -71,13 +71,15 @@
         "step": {
             "init": {
                 "title": "Immich Album Watcher Options",
-                "description": "Configure which albums to monitor and how often to check for changes.",
+                "description": "Configure how often to check for changes and optional Telegram integration.",
                 "data": {
                     "albums": "Albums to watch",
-                    "scan_interval": "Scan interval (seconds)"
+                    "scan_interval": "Scan interval (seconds)",
+                    "telegram_bot_token": "Telegram Bot Token"
                 },
                 "data_description": {
-                    "scan_interval": "How often to check for album changes (10-3600 seconds)"
+                    "scan_interval": "How often to check for album changes (10-3600 seconds)",
+                    "telegram_bot_token": "Bot token for sending media to Telegram (optional)"
                 }
             }
         },

@@ -26,6 +26,7 @@ from .const import (
     CONF_HUB_NAME,
     CONF_IMMICH_URL,
     CONF_SCAN_INTERVAL,
+    CONF_TELEGRAM_BOT_TOKEN,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     SUBENTRY_TYPE_ALBUM,
@@ -248,11 +249,17 @@ class ImmichAlbumWatcherOptionsFlow(OptionsFlow):
                     CONF_SCAN_INTERVAL: user_input.get(
                         CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
                     ),
+                    CONF_TELEGRAM_BOT_TOKEN: user_input.get(
+                        CONF_TELEGRAM_BOT_TOKEN, ""
+                    ),
                 },
             )
 
         current_interval = self._config_entry.options.get(
             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+        )
+        current_bot_token = self._config_entry.options.get(
+            CONF_TELEGRAM_BOT_TOKEN, ""
         )
 
         return self.async_show_form(
@@ -262,6 +269,9 @@ class ImmichAlbumWatcherOptionsFlow(OptionsFlow):
                     vol.Required(
                         CONF_SCAN_INTERVAL, default=current_interval
                     ): vol.All(vol.Coerce(int), vol.Range(min=10, max=3600)),
+                    vol.Optional(
+                        CONF_TELEGRAM_BOT_TOKEN, default=current_bot_token
+                    ): str,
                 }
             ),
         )

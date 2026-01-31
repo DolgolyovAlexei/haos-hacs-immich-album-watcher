@@ -24,3 +24,44 @@ get_recent_assets:
           min: 1
           max: 100
           mode: slider
+
+send_telegram_media_group:
+  name: Send Telegram Media Group
+  description: Send specified media URLs to a Telegram chat as a media group.
+  target:
+    entity:
+      integration: immich_album_watcher
+      domain: sensor
+  fields:
+    bot_token:
+      name: Bot Token
+      description: Telegram bot token. Uses configured token if not provided.
+      required: false
+      selector:
+        text:
+    chat_id:
+      name: Chat ID
+      description: Telegram chat ID to send to.
+      required: true
+      selector:
+        text:
+    urls:
+      name: URLs
+      description: List of media URLs to send (max 10). Each item should have 'url' and 'type' (photo/video).
+      required: true
+      selector:
+        object:
+    caption:
+      name: Caption
+      description: Optional caption for the media group (applied to first item).
+      required: false
+      selector:
+        text:
+          multiline: true
+    reply_to_message_id:
+      name: Reply To Message ID
+      description: Message ID to reply to.
+      required: false
+      selector:
+        number:
+          mode: box

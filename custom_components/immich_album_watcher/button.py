@@ -109,8 +109,7 @@ class ImmichCreateShareLinkButton(
             name=self._album_name,
             manufacturer="Immich",
             entry_type=DeviceEntryType.SERVICE,
-            via_device=(DOMAIN, self._entry.entry_id),
-        )
+                    )
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
@@ -200,8 +199,7 @@ class ImmichDeleteShareLinkButton(
             name=self._album_name,
             manufacturer="Immich",
             entry_type=DeviceEntryType.SERVICE,
-            via_device=(DOMAIN, self._entry.entry_id),
-        )
+                    )
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
@@ -298,8 +296,7 @@ class ImmichCreateProtectedLinkButton(
             name=self._album_name,
             manufacturer="Immich",
             entry_type=DeviceEntryType.SERVICE,
-            via_device=(DOMAIN, self._entry.entry_id),
-        )
+                    )
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
@@ -393,8 +390,7 @@ class ImmichDeleteProtectedLinkButton(
             name=self._album_name,
             manufacturer="Immich",
             entry_type=DeviceEntryType.SERVICE,
-            via_device=(DOMAIN, self._entry.entry_id),
-        )
+                    )
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
