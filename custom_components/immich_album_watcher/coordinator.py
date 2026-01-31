@@ -29,6 +29,8 @@ from .const import (
     ATTR_ASSET_DOWNLOAD_URL,
     ATTR_ASSET_FILENAME,
     ATTR_ASSET_IS_FAVORITE,
+    ATTR_ASSET_LATITUDE,
+    ATTR_ASSET_LONGITUDE,
     ATTR_ASSET_OWNER,
     ATTR_ASSET_OWNER_ID,
     ATTR_ASSET_PLAYBACK_URL,
@@ -120,6 +122,8 @@ class AssetInfo:
     people: list[str] = field(default_factory=list)
     is_favorite: bool = False
     rating: int | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     is_processed: bool = True  # Whether asset is fully processed by Immich
 
     @classmethod
@@ -147,6 +151,10 @@ class AssetInfo:
         is_favorite = data.get("isFavorite", False)
         rating = exif_info.get("rating") if exif_info else None
 
+        # Get geolocation
+        latitude = exif_info.get("latitude") if exif_info else None
+        longitude = exif_info.get("longitude") if exif_info else None
+
         # Check if asset is fully processed by Immich
         asset_type = data.get("type", ASSET_TYPE_IMAGE)
         is_processed = cls._check_processing_status(data, asset_type)
@@ -162,6 +170,8 @@ class AssetInfo:
             people=people,
             is_favorite=is_favorite,
             rating=rating,
+            latitude=latitude,
+            longitude=longitude,
             is_processed=is_processed,
         )
 
@@ -648,6 +658,8 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
             ATTR_PEOPLE: asset.people,
             ATTR_ASSET_IS_FAVORITE: asset.is_favorite,
             ATTR_ASSET_RATING: asset.rating,
+            ATTR_ASSET_LATITUDE: asset.latitude,
+            ATTR_ASSET_LONGITUDE: asset.longitude,
         }
 
         # Add thumbnail URL if requested

@@ -418,6 +418,8 @@ Each item in the `added_assets` list contains the following fields:
 | `description` | Description/caption of the asset (from EXIF data) |
 | `is_favorite` | Whether the asset is marked as favorite (`true` or `false`) |
 | `rating` | User rating of the asset (1-5 stars, or `null` if not rated) |
+| `latitude` | GPS latitude coordinate (or `null` if no geolocation) |
+| `longitude` | GPS longitude coordinate (or `null` if no geolocation) |
 | `url` | Public URL to view the asset (only present if album has a shared link) |
 | `download_url` | Direct download URL for the original file (if shared link exists) |
 | `playback_url` | Video playback URL (for VIDEO assets only, if shared link exists) |

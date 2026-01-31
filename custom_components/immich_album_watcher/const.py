@@ -68,6 +68,8 @@ ATTR_ASSET_PLAYBACK_URL: Final = "playback_url"
 ATTR_ASSET_DESCRIPTION: Final = "description"
 ATTR_ASSET_IS_FAVORITE: Final = "is_favorite"
 ATTR_ASSET_RATING: Final = "rating"
+ATTR_ASSET_LATITUDE: Final = "latitude"
+ATTR_ASSET_LONGITUDE: Final = "longitude"
 
 # Asset types
 ASSET_TYPE_IMAGE: Final = "IMAGE"
