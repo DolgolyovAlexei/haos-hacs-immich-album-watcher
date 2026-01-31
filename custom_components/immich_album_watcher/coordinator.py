@@ -28,11 +28,13 @@ from .const import (
     ATTR_ASSET_DESCRIPTION,
     ATTR_ASSET_DOWNLOAD_URL,
     ATTR_ASSET_FILENAME,
+    ATTR_ASSET_IS_FAVORITE,
     ATTR_ASSET_OWNER,
     ATTR_ASSET_OWNER_ID,
+    ATTR_ASSET_PLAYBACK_URL,
+    ATTR_ASSET_RATING,
     ATTR_ASSET_TYPE,
     ATTR_ASSET_URL,
-    ATTR_ASSET_PLAYBACK_URL,
     ATTR_CHANGE_TYPE,
     ATTR_HUB_NAME,
     ATTR_PEOPLE,
@@ -115,6 +117,8 @@ class AssetInfo:
     owner_name: str = ""
     description: str = ""
     people: list[str] = field(default_factory=list)
+    is_favorite: bool = False
+    rating: int | None = None
 
     @classmethod
     def from_api_response(
@@ -136,6 +140,10 @@ class AssetInfo:
         if exif_info:
             description = exif_info.get("description", "") or ""
 
+        # Get favorites and rating
+        is_favorite = data.get("isFavorite", False)
+        rating = data.get("exifInfo", {}).get("rating") if exif_info else None
+
         return cls(
             id=data["id"],
             type=data.get("type", ASSET_TYPE_IMAGE),
@@ -145,6 +153,8 @@ class AssetInfo:
             owner_name=owner_name,
             description=description,
             people=people,
+            is_favorite=is_favorite,
+            rating=rating,
         )
 
 
@@ -324,6 +334,8 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
                 "created_at": asset.created_at,
                 "description": asset.description,
                 "people": asset.people,
+                "is_favorite": asset.is_favorite,
+                "rating": asset.rating,
                 "thumbnail_url": f"{self._url}/api/assets/{asset.id}/thumbnail",
             }
             if asset.type == ASSET_TYPE_VIDEO:
@@ -670,6 +682,8 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
                 ATTR_ASSET_OWNER_ID: asset.owner_id,
                 ATTR_ASSET_DESCRIPTION: asset.description,
                 ATTR_PEOPLE: asset.people,
+                ATTR_ASSET_IS_FAVORITE: asset.is_favorite,
+                ATTR_ASSET_RATING: asset.rating,
             }
             asset_url = self._get_asset_public_url(asset.id)
             if asset_url:

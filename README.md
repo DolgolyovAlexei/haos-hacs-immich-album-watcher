@@ -301,6 +301,8 @@ Each item in the `added_assets` list contains the following fields:
 | `asset_owner` | Display name of the user who owns the asset |
 | `asset_owner_id` | Unique ID of the user who owns the asset |
 | `asset_description` | Description/caption of the asset (from EXIF data) |
+| `asset_is_favorite` | Whether the asset is marked as favorite (`true` or `false`) |
+| `asset_rating` | User rating of the asset (1-5 stars, or `null` if not rated) |
 | `asset_url` | Public URL to view the asset (only present if album has a shared link) |
 | `people` | List of people detected in this specific asset |
 

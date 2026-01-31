@@ -66,6 +66,8 @@ ATTR_ASSET_URL: Final = "asset_url"
 ATTR_ASSET_DOWNLOAD_URL: Final = "asset_download_url"
 ATTR_ASSET_PLAYBACK_URL: Final = "asset_playback_url"
 ATTR_ASSET_DESCRIPTION: Final = "asset_description"
+ATTR_ASSET_IS_FAVORITE: Final = "asset_is_favorite"
+ATTR_ASSET_RATING: Final = "asset_rating"
 
 # Asset types
 ASSET_TYPE_IMAGE: Final = "IMAGE"
