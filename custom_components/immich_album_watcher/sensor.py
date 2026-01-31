@@ -114,9 +114,10 @@ async def async_setup_entry(
             vol.Optional("chunk_delay", default=0): vol.All(
                 vol.Coerce(int), vol.Range(min=0, max=60000)
             ),
+            vol.Optional("wait_for_response", default=True): bool,
         },
         "async_send_telegram_notification",
-        supports_response=SupportsResponse.ONLY,
+        supports_response=SupportsResponse.OPTIONAL,
     )
 
 
@@ -186,6 +187,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         parse_mode: str = "HTML",
         max_group_size: int = 10,
         chunk_delay: int = 0,
+        wait_for_response: bool = True,
     ) -> ServiceResponse:
         """Send notification to Telegram.
 
@@ -197,7 +199,53 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
 
         Each item in urls should be a dict with 'url' and 'type' (photo/video).
         Downloads media and uploads to Telegram to bypass CORS restrictions.
+
+        If wait_for_response is False, the task will be executed in the background
+        and the service will return immediately.
         """
+        # If non-blocking mode, create a background task and return immediately
+        if not wait_for_response:
+            self.hass.async_create_task(
+                self._execute_telegram_notification(
+                    chat_id=chat_id,
+                    urls=urls,
+                    bot_token=bot_token,
+                    caption=caption,
+                    reply_to_message_id=reply_to_message_id,
+                    disable_web_page_preview=disable_web_page_preview,
+                    parse_mode=parse_mode,
+                    max_group_size=max_group_size,
+                    chunk_delay=chunk_delay,
+                )
+            )
+            return {"success": True, "status": "queued", "message": "Notification queued for background processing"}
+
+        # Blocking mode - execute and return result
+        return await self._execute_telegram_notification(
+            chat_id=chat_id,
+            urls=urls,
+            bot_token=bot_token,
+            caption=caption,
+            reply_to_message_id=reply_to_message_id,
+            disable_web_page_preview=disable_web_page_preview,
+            parse_mode=parse_mode,
+            max_group_size=max_group_size,
+            chunk_delay=chunk_delay,
+        )
+
+    async def _execute_telegram_notification(
+        self,
+        chat_id: str,
+        urls: list[dict[str, str]] | None = None,
+        bot_token: str | None = None,
+        caption: str | None = None,
+        reply_to_message_id: int | None = None,
+        disable_web_page_preview: bool | None = None,
+        parse_mode: str = "HTML",
+        max_group_size: int = 10,
+        chunk_delay: int = 0,
+    ) -> ServiceResponse:
+        """Execute the Telegram notification (internal method)."""
         import json
         import aiohttp
         from aiohttp import FormData

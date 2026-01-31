@@ -186,6 +186,21 @@ data:
   parse_mode: "HTML"  # Default, can be omitted
 ```
 
+Non-blocking mode (fire-and-forget):
+
+```yaml
+service: immich_album_watcher.send_telegram_notification
+target:
+  entity_id: sensor.album_name_asset_count
+data:
+  chat_id: "-1001234567890"
+  urls:
+    - url: "https://immich.example.com/api/assets/xxx/thumbnail?key=yyy"
+      type: photo
+  caption: "Quick notification"
+  wait_for_response: false  # Automation continues immediately
+```
+
 | Field | Description | Required |
 |-------|-------------|----------|
 | `chat_id` | Telegram chat ID to send to | Yes |
@@ -197,8 +212,9 @@ data:
 | `parse_mode` | How to parse caption/text. Options: `HTML`, `Markdown`, `MarkdownV2`, or empty string for plain text. Default: `HTML` | No |
 | `max_group_size` | Maximum media items per group (2-10). Large lists split into multiple groups. Default: 10 | No |
 | `chunk_delay` | Delay in milliseconds between sending multiple groups (0-60000). Useful for rate limiting. Default: 0 | No |
+| `wait_for_response` | Wait for Telegram to finish processing. Set to `false` for fire-and-forget (automation continues immediately). Default: `true` | No |
 
-The service returns a response with `success` status and `message_id` (single message), `message_ids` (media group), or `groups_sent` (number of groups when split).
+The service returns a response with `success` status and `message_id` (single message), `message_ids` (media group), or `groups_sent` (number of groups when split). When `wait_for_response` is `false`, the service returns immediately with `{"success": true, "status": "queued"}` while processing continues in the background.
 
 ## Events
 

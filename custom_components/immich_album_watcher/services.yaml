@@ -109,3 +109,10 @@ send_telegram_notification:
           step: 100
           unit_of_measurement: "ms"
           mode: slider
+    wait_for_response:
+      name: Wait For Response
+      description: Wait for Telegram to finish processing before returning. Set to false for fire-and-forget (automation continues immediately).
+      required: false
+      default: true
+      selector:
+        boolean:
