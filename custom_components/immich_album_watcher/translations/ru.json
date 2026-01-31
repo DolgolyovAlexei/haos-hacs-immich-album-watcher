@@ -151,11 +151,11 @@
                 },
                 "order_by": {
                     "name": "Сортировать по",
-                    "description": "Поле для сортировки файлов (date - дата, rating - рейтинг, name - имя)."
+                    "description": "Поле для сортировки файлов (date - дата, rating - рейтинг, name - имя, random - случайный)."
                 },
                 "order": {
                     "name": "Порядок",
-                    "description": "Направление сортировки (ascending - по возрастанию, descending - по убыванию, random - случайный)."
+                    "description": "Направление сортировки (ascending - по возрастанию, descending - по убыванию)."
                 },
                 "asset_type": {
                     "name": "Тип файла",

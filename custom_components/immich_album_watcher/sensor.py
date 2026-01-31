@@ -94,14 +94,22 @@ async def async_setup_entry(
     platform.async_register_entity_service(
         SERVICE_GET_ASSETS,
         {
-            vol.Optional("count", default=10): vol.All(
+            vol.Optional("limit", default=10): vol.All(
                 vol.Coerce(int), vol.Range(min=1, max=100)
             ),
-            vol.Optional("filter", default="none"): vol.In(["none", "favorite", "rating"]),
+            vol.Optional("favorite_only", default=False): bool,
             vol.Optional("filter_min_rating", default=1): vol.All(
                 vol.Coerce(int), vol.Range(min=1, max=5)
             ),
-            vol.Optional("order", default="descending"): vol.In(["ascending", "descending", "random"]),
+            vol.Optional("order_by", default="date"): vol.In(
+                ["date", "rating", "name", "random"]
+            ),
+            vol.Optional("order", default="descending"): vol.In(
+                ["ascending", "descending"]
+            ),
+            vol.Optional("asset_type", default="all"): vol.In(["all", "photo", "video"]),
+            vol.Optional("min_date"): str,
+            vol.Optional("max_date"): str,
         },
         "async_get_assets",
         supports_response=SupportsResponse.ONLY,
@@ -124,6 +132,10 @@ async def async_setup_entry(
                 vol.Coerce(int), vol.Range(min=0, max=60000)
             ),
             vol.Optional("wait_for_response", default=True): bool,
+            vol.Optional("max_asset_data_size"): vol.All(
+                vol.Coerce(int), vol.Range(min=1, max=52428800)
+            ),
+            vol.Optional("send_large_photos_as_documents", default=False): bool,
         },
         "async_send_telegram_notification",
         supports_response=SupportsResponse.OPTIONAL,

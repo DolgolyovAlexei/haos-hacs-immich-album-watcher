@@ -151,11 +151,11 @@
                 },
                 "order_by": {
                     "name": "Order By",
-                    "description": "Field to sort assets by (date, rating, or name)."
+                    "description": "Field to sort assets by (date, rating, name, or random)."
                 },
                 "order": {
                     "name": "Order",
-                    "description": "Sort direction (ascending, descending, or random)."
+                    "description": "Sort direction (ascending or descending)."
                 },
                 "asset_type": {
                     "name": "Asset Type",

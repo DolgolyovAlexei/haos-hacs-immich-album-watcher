@@ -413,30 +413,28 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
             assets = [a for a in assets if a.created_at <= max_date]
 
         # Apply ordering
-        if order == "random":
+        if order_by == "random":
             import random
             random.shuffle(assets)
-        else:
-            # Determine sort key based on order_by
-            if order_by == "rating":
-                # Sort by rating, putting None values last
-                assets = sorted(
-                    assets,
-                    key=lambda a: (a.rating is None, a.rating if a.rating is not None else 0),
-                    reverse=(order == "descending")
-                )
-            elif order_by == "name":
-                assets = sorted(
-                    assets,
-                    key=lambda a: a.filename.lower(),
-                    reverse=(order == "descending")
-                )
-            else:  # date (default)
-                assets = sorted(
-                    assets,
-                    key=lambda a: a.created_at,
-                    reverse=(order == "descending")
-                )
+        elif order_by == "rating":
+            # Sort by rating, putting None values last
+            assets = sorted(
+                assets,
+                key=lambda a: (a.rating is None, a.rating if a.rating is not None else 0),
+                reverse=(order == "descending")
+            )
+        elif order_by == "name":
+            assets = sorted(
+                assets,
+                key=lambda a: a.filename.lower(),
+                reverse=(order == "descending")
+            )
+        else:  # date (default)
+            assets = sorted(
+                assets,
+                key=lambda a: a.created_at,
+                reverse=(order == "descending")
+            )
 
         # Limit results
         assets = assets[:limit]

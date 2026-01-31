@@ -55,6 +55,8 @@ get_assets:
               value: "rating"
             - label: "Name"
               value: "name"
+            - label: "Random"
+              value: "random"
     order:
       name: Order
       description: Sort direction.
@@ -67,8 +69,6 @@ get_assets:
               value: "ascending"
             - label: "Descending"
               value: "descending"
-            - label: "Random"
-              value: "random"
     asset_type:
       name: Asset Type
       description: Filter assets by type (all, photo, or video).

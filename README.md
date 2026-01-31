@@ -121,8 +121,8 @@ data:
   limit: 10                    # Maximum number of assets (1-100)
   favorite_only: false         # true = favorites only, false = all assets
   filter_min_rating: 4         # Min rating (1-5)
-  order_by: "date"             # Options: "date", "rating", "name"
-  order: "descending"          # Options: "ascending", "descending", "random"
+  order_by: "date"             # Options: "date", "rating", "name", "random"
+  order: "descending"          # Options: "ascending", "descending"
   asset_type: "all"            # Options: "all", "photo", "video"
   min_date: "2024-01-01"       # Optional: assets created on or after this date
   max_date: "2024-12-31"       # Optional: assets created on or before this date
@@ -137,10 +137,10 @@ data:
   - `"date"`: Sort by creation date
   - `"rating"`: Sort by rating (assets without rating are placed last)
   - `"name"`: Sort by filename
+  - `"random"`: Random order (ignores `order`)
 - `order` (optional, default: "descending"): Sort direction
   - `"ascending"`: Ascending order
   - `"descending"`: Descending order
-  - `"random"`: Random order (ignores `order_by`)
 - `asset_type` (optional, default: "all"): Filter by asset type
   - `"all"`: No type filtering, return both photos and videos
   - `"photo"`: Return only photos
@@ -172,7 +172,7 @@ target:
 data:
   limit: 10
   filter_min_rating: 3
-  order: "random"
+  order_by: "random"
 ```
 
 Get 20 most recent photos only:
