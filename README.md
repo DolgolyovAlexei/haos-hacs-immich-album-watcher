@@ -4,6 +4,8 @@
 
 A Home Assistant custom integration that monitors [Immich](https://immich.app/) photo/video library albums for changes and exposes them as Home Assistant entities with event-firing capabilities.
 
+> **Tip:** For the best experience, use this integration with the [Immich Album Watcher Blueprint](https://github.com/DolgolyovAlexei/haos-blueprints/blob/main/Common/Immich%20Album%20Watcher.yaml) to easily create automations for album change notifications.
+
 ## Features
 
 - **Album Monitoring** - Watch selected Immich albums for asset additions and removals
@@ -31,7 +33,7 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
   - Detected people in the asset
 - **Services** - Custom service calls:
   - `immich_album_watcher.refresh` - Force immediate data refresh
-  - `immich_album_watcher.get_recent_assets` - Get recent assets from an album
+  - `immich_album_watcher.get_assets` - Get assets from an album with filtering and ordering
   - `immich_album_watcher.send_telegram_notification` - Send text, photo, video, or media group to Telegram
 - **Share Link Management** - Button entities to create and delete share links:
   - Create/delete public (unprotected) share links
@@ -59,8 +61,6 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
 2. Copy the `custom_components/immich_album_watcher` folder to your Home Assistant `config/custom_components` directory
 3. Restart Home Assistant
 4. Add the integration via **Settings** → **Devices & Services** → **Add Integration**
-
-> **Tip:** For the best experience, use this integration with the [Immich Album Watcher Blueprint](https://github.com/DolgolyovAlexei/haos-blueprints/blob/main/Common/Immich%20Album%20Watcher.yaml) to easily create automations for album change notifications.
 
 ## Configuration
 
@@ -103,16 +103,59 @@ Force an immediate refresh of all album data:
 service: immich_album_watcher.refresh
 ```
 
-### Get Recent Assets
+### Get Assets
 
-Get the most recent assets from a specific album (returns response data):
+Get assets from a specific album with optional filtering and ordering (returns response data):
 
 ```yaml
-service: immich_album_watcher.get_recent_assets
+service: immich_album_watcher.get_assets
+target:
+  entity_id: sensor.album_name_asset_count
+data:
+  count: 10                    # Maximum number of assets (1-100)
+  filter: "favorite"           # Options: "none", "favorite", "rating"
+  filter_min_rating: 4         # Min rating (1-5), used when filter="rating"
+  order: "descending"          # Options: "ascending", "descending", "random"
+```
+
+**Parameters:**
+
+- `count` (optional, default: 10): Maximum number of assets to return (1-100)
+- `filter` (optional, default: "none"): Filter type
+  - `"none"`: No filtering, return all assets
+  - `"favorite"`: Return only favorite assets
+  - `"rating"`: Return assets with rating >= `filter_min_rating`
+- `filter_min_rating` (optional, default: 1): Minimum rating (1-5 stars), used when `filter="rating"`
+- `order` (optional, default: "descending"): Sort order by creation date
+  - `"ascending"`: Oldest first
+  - `"descending"`: Newest first
+  - `"random"`: Random order
+
+**Examples:**
+
+Get 5 most recent favorite assets:
+
+```yaml
+service: immich_album_watcher.get_assets
+target:
+  entity_id: sensor.album_name_asset_count
+data:
+  count: 5
+  filter: "favorite"
+  order: "descending"
+```
+
+Get 10 random assets rated 3 stars or higher:
+
+```yaml
+service: immich_album_watcher.get_assets
 target:
   entity_id: sensor.album_name_asset_count
 data:
   count: 10
+  filter: "rating"
+  filter_min_rating: 3
+  order: "random"
 ```
 
 ### Send Telegram Notification

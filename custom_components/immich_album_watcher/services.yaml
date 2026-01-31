@@ -6,9 +6,9 @@ refresh:
       integration: immich_album_watcher
       domain: sensor
 
-get_recent_assets:
-  name: Get Recent Assets
-  description: Get the most recent assets from the targeted album.
+get_assets:
+  name: Get Assets
+  description: Get assets from the targeted album with optional filtering and ordering.
   target:
     entity:
       integration: immich_album_watcher
@@ -16,7 +16,7 @@ get_recent_assets:
   fields:
     count:
       name: Count
-      description: Number of recent assets to return (1-100).
+      description: Maximum number of assets to return (1-100).
       required: false
       default: 10
       selector:
@@ -24,6 +24,44 @@ get_recent_assets:
           min: 1
           max: 100
           mode: slider
+    filter:
+      name: Filter
+      description: Filter assets by type (none, favorite, or rating-based).
+      required: false
+      default: "none"
+      selector:
+        select:
+          options:
+            - label: "None (no filtering)"
+              value: "none"
+            - label: "Favorites only"
+              value: "favorite"
+            - label: "By minimum rating"
+              value: "rating"
+    filter_min_rating:
+      name: Minimum Rating
+      description: Minimum rating for assets (1-5). Only used when filter is set to 'rating'.
+      required: false
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: slider
+    order:
+      name: Order
+      description: Sort order for assets by creation date.
+      required: false
+      default: "descending"
+      selector:
+        select:
+          options:
+            - label: "Ascending (oldest first)"
+              value: "ascending"
+            - label: "Descending (newest first)"
+              value: "descending"
+            - label: "Random"
+              value: "random"
 
 send_telegram_notification:
   name: Send Telegram Notification

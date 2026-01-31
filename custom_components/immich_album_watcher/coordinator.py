@@ -45,6 +45,7 @@ from .const import (
     ATTR_OLD_SHARED,
     ATTR_NEW_SHARED,
     ATTR_SHARED,
+    ATTR_THUMBNAIL_URL,
     DOMAIN,
     EVENT_ALBUM_CHANGED,
     EVENT_ASSETS_ADDED,
@@ -313,35 +314,52 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
                     self._album_name,
                 )
 
-    async def async_get_recent_assets(self, count: int = 10) -> list[dict[str, Any]]:
-        """Get recent assets from the album."""
+    async def async_get_assets(
+        self,
+        count: int = 10,
+        filter: str = "none",
+        filter_min_rating: int = 1,
+        order: str = "descending",
+    ) -> list[dict[str, Any]]:
+        """Get assets from the album with optional filtering and ordering.
+
+        Args:
+            count: Maximum number of assets to return (1-100)
+            filter: Filter type - 'none', 'favorite', or 'rating'
+            filter_min_rating: Minimum rating for assets (1-5), used when filter='rating'
+            order: Sort order - 'ascending', 'descending', or 'random'
+
+        Returns:
+            List of asset data dictionaries
+        """
         if self.data is None:
             return []
 
-        # Sort assets by created_at descending
-        sorted_assets = sorted(
-            self.data.assets.values(),
-            key=lambda a: a.created_at,
-            reverse=True,
-        )[:count]
+        # Start with all assets
+        assets = list(self.data.assets.values())
 
+        # Apply filtering
+        if filter == "favorite":
+            assets = [a for a in assets if a.is_favorite]
+        elif filter == "rating":
+            assets = [a for a in assets if a.rating is not None and a.rating >= filter_min_rating]
+
+        # Apply ordering
+        if order == "random":
+            import random
+            random.shuffle(assets)
+        elif order == "ascending":
+            assets = sorted(assets, key=lambda a: a.created_at, reverse=False)
+        else:  # descending (default)
+            assets = sorted(assets, key=lambda a: a.created_at, reverse=True)
+
+        # Limit count
+        assets = assets[:count]
+
+        # Build result with all available asset data (matching event data)
         result = []
-        for asset in sorted_assets:
-            asset_data = {
-                "id": asset.id,
-                "type": asset.type,
-                "filename": asset.filename,
-                "created_at": asset.created_at,
-                "description": asset.description,
-                "people": asset.people,
-                "is_favorite": asset.is_favorite,
-                "rating": asset.rating,
-                "thumbnail_url": f"{self._url}/api/assets/{asset.id}/thumbnail",
-            }
-            if asset.type == ASSET_TYPE_VIDEO:
-                video_url = self._get_asset_video_url(asset.id)
-                if video_url:
-                    asset_data["video_url"] = video_url
+        for asset in assets:
+            asset_data = self._build_asset_detail(asset, include_thumbnail=True)
             result.append(asset_data)
         return result
 
@@ -513,6 +531,68 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
             return f"{self._url}/api/assets/{asset_id}/video/playback?key={non_expired[0].key}"
         return None
 
+    def _get_asset_photo_url(self, asset_id: str) -> str | None:
+        """Get the transcoded/preview URL for a photo asset."""
+        accessible_links = self._get_accessible_links()
+        if accessible_links:
+            return f"{self._url}/api/assets/{asset_id}/original?key={accessible_links[0].key}"
+        non_expired = [link for link in self._shared_links if not link.is_expired]
+        if non_expired:
+            return f"{self._url}/api/assets/{asset_id}/original?key={non_expired[0].key}"
+        return None
+
+    def _build_asset_detail(
+        self, asset: AssetInfo, include_thumbnail: bool = True
+    ) -> dict[str, Any]:
+        """Build asset detail dictionary with all available data.
+
+        Args:
+            asset: AssetInfo object
+            include_thumbnail: If True, include thumbnail_url
+
+        Returns:
+            Dictionary with asset details (using ATTR_* constants for consistency)
+        """
+        # Base asset data
+        asset_detail = {
+            "id": asset.id,
+            ATTR_ASSET_TYPE: asset.type,
+            ATTR_ASSET_FILENAME: asset.filename,
+            ATTR_ASSET_CREATED: asset.created_at,
+            ATTR_ASSET_OWNER: asset.owner_name,
+            ATTR_ASSET_OWNER_ID: asset.owner_id,
+            ATTR_ASSET_DESCRIPTION: asset.description,
+            ATTR_PEOPLE: asset.people,
+            ATTR_ASSET_IS_FAVORITE: asset.is_favorite,
+            ATTR_ASSET_RATING: asset.rating,
+        }
+
+        # Add thumbnail URL if requested
+        if include_thumbnail:
+            asset_detail[ATTR_THUMBNAIL_URL] = f"{self._url}/api/assets/{asset.id}/thumbnail"
+
+        # Add public viewer URL (web page)
+        asset_url = self._get_asset_public_url(asset.id)
+        if asset_url:
+            asset_detail[ATTR_ASSET_URL] = asset_url
+
+        # Add download URL (direct media file)
+        asset_download_url = self._get_asset_download_url(asset.id)
+        if asset_download_url:
+            asset_detail[ATTR_ASSET_DOWNLOAD_URL] = asset_download_url
+
+        # Add type-specific URLs
+        if asset.type == ASSET_TYPE_VIDEO:
+            asset_video_url = self._get_asset_video_url(asset.id)
+            if asset_video_url:
+                asset_detail[ATTR_ASSET_PLAYBACK_URL] = asset_video_url
+        elif asset.type == ASSET_TYPE_IMAGE:
+            asset_photo_url = self._get_asset_photo_url(asset.id)
+            if asset_photo_url:
+                asset_detail["photo_url"] = asset_photo_url  # TODO: Add ATTR_ASSET_PHOTO_URL constant
+
+        return asset_detail
+
     async def _async_update_data(self) -> AlbumData | None:
         """Fetch data from Immich API."""
         if self._session is None:
@@ -673,28 +753,7 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
         """Fire Home Assistant events for album changes."""
         added_assets_detail = []
         for asset in change.added_assets:
-            asset_detail = {
-                "id": asset.id,
-                ATTR_ASSET_TYPE: asset.type,
-                ATTR_ASSET_FILENAME: asset.filename,
-                ATTR_ASSET_CREATED: asset.created_at,
-                ATTR_ASSET_OWNER: asset.owner_name,
-                ATTR_ASSET_OWNER_ID: asset.owner_id,
-                ATTR_ASSET_DESCRIPTION: asset.description,
-                ATTR_PEOPLE: asset.people,
-                ATTR_ASSET_IS_FAVORITE: asset.is_favorite,
-                ATTR_ASSET_RATING: asset.rating,
-            }
-            asset_url = self._get_asset_public_url(asset.id)
-            if asset_url:
-                asset_detail[ATTR_ASSET_URL] = asset_url
-            asset_download_url = self._get_asset_download_url(asset.id)
-            if asset_download_url:
-                asset_detail[ATTR_ASSET_DOWNLOAD_URL] = asset_download_url
-            if asset.type == ASSET_TYPE_VIDEO:
-                asset_video_url = self._get_asset_video_url(asset.id)
-                if asset_video_url:
-                    asset_detail[ATTR_ASSET_PLAYBACK_URL] = asset_video_url
+            asset_detail = self._build_asset_detail(asset, include_thumbnail=False)
             added_assets_detail.append(asset_detail)
 
         event_data = {

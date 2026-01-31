@@ -133,13 +133,25 @@
             "name": "Refresh",
             "description": "Force an immediate refresh of album data from Immich."
         },
-        "get_recent_assets": {
-            "name": "Get Recent Assets",
-            "description": "Get the most recent assets from the targeted album.",
+        "get_assets": {
+            "name": "Get Assets",
+            "description": "Get assets from the targeted album with optional filtering and ordering.",
             "fields": {
                 "count": {
                     "name": "Count",
-                    "description": "Number of recent assets to return (1-100)."
+                    "description": "Maximum number of assets to return (1-100)."
+                },
+                "filter": {
+                    "name": "Filter",
+                    "description": "Filter assets by type (none, favorite, or rating-based)."
+                },
+                "filter_min_rating": {
+                    "name": "Minimum Rating",
+                    "description": "Minimum rating for assets (1-5). Only used when filter is set to 'rating'."
+                },
+                "order": {
+                    "name": "Order",
+                    "description": "Sort order for assets by creation date."
                 }
             }
         },

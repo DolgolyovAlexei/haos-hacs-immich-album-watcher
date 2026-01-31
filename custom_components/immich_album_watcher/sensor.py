@@ -40,13 +40,17 @@ from .const import (
     CONF_HUB_NAME,
     CONF_TELEGRAM_BOT_TOKEN,
     DOMAIN,
-    SERVICE_GET_RECENT_ASSETS,
+    SERVICE_GET_ASSETS,
     SERVICE_REFRESH,
     SERVICE_SEND_TELEGRAM_NOTIFICATION,
 )
 from .coordinator import AlbumData, ImmichAlbumWatcherCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+# Telegram photo limits
+TELEGRAM_MAX_PHOTO_SIZE = 10 * 1024 * 1024  # 10 MB - Telegram's max photo size
+TELEGRAM_MAX_DIMENSION_SUM = 10000  # Maximum sum of width + height in pixels
 
 
 async def async_setup_entry(
@@ -88,13 +92,18 @@ async def async_setup_entry(
     )
 
     platform.async_register_entity_service(
-        SERVICE_GET_RECENT_ASSETS,
+        SERVICE_GET_ASSETS,
         {
             vol.Optional("count", default=10): vol.All(
                 vol.Coerce(int), vol.Range(min=1, max=100)
             ),
+            vol.Optional("filter", default="none"): vol.In(["none", "favorite", "rating"]),
+            vol.Optional("filter_min_rating", default=1): vol.All(
+                vol.Coerce(int), vol.Range(min=1, max=5)
+            ),
+            vol.Optional("order", default="descending"): vol.In(["ascending", "descending", "random"]),
         },
-        "async_get_recent_assets",
+        "async_get_assets",
         supports_response=SupportsResponse.ONLY,
     )
 
@@ -171,9 +180,20 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         """Refresh data for this album."""
         await self.coordinator.async_refresh_now()
 
-    async def async_get_recent_assets(self, count: int = 10) -> ServiceResponse:
-        """Get recent assets for this album."""
-        assets = await self.coordinator.async_get_recent_assets(count)
+    async def async_get_assets(
+        self,
+        count: int = 10,
+        filter: str = "none",
+        filter_min_rating: int = 1,
+        order: str = "descending",
+    ) -> ServiceResponse:
+        """Get assets for this album with optional filtering and ordering."""
+        assets = await self.coordinator.async_get_assets(
+            count=count,
+            filter=filter,
+            filter_min_rating=filter_min_rating,
+            order=order,
+        )
         return {"assets": assets}
 
     async def async_send_telegram_notification(
@@ -342,6 +362,60 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
             _LOGGER.error("Telegram message send failed: %s", err)
             return {"success": False, "error": str(err)}
 
+    def _log_telegram_error(
+        self,
+        error_code: int | None,
+        description: str,
+        data: bytes | None = None,
+        media_type: str = "photo",
+    ) -> None:
+        """Log detailed Telegram API error with diagnostics.
+
+        Args:
+            error_code: Telegram error code
+            description: Error description from Telegram
+            data: Media data bytes (optional, for size diagnostics)
+            media_type: Type of media (photo/video)
+        """
+        error_msg = f"Telegram API error ({error_code}): {description}"
+
+        # Add diagnostic information based on error type
+        if data:
+            error_msg += f" | Media size: {len(data)} bytes ({len(data) / (1024 * 1024):.2f} MB)"
+
+            # Check dimensions for photos
+            if media_type == "photo":
+                try:
+                    from PIL import Image
+                    import io
+
+                    img = Image.open(io.BytesIO(data))
+                    width, height = img.size
+                    dimension_sum = width + height
+                    error_msg += f" | Dimensions: {width}x{height} (sum={dimension_sum})"
+
+                    # Highlight limit violations
+                    if len(data) > TELEGRAM_MAX_PHOTO_SIZE:
+                        error_msg += f" | EXCEEDS size limit ({TELEGRAM_MAX_PHOTO_SIZE / (1024 * 1024):.0f} MB)"
+                    if dimension_sum > TELEGRAM_MAX_DIMENSION_SUM:
+                        error_msg += f" | EXCEEDS dimension limit ({TELEGRAM_MAX_DIMENSION_SUM})"
+                except Exception:
+                    pass
+
+        # Provide suggestions based on error description
+        suggestions = []
+        if "dimension" in description.lower() or "PHOTO_INVALID_DIMENSIONS" in description:
+            suggestions.append("Photo dimensions too large - consider setting send_large_photos_as_documents=true")
+        elif "too large" in description.lower() or error_code == 413:
+            suggestions.append("File size too large - consider setting send_large_photos_as_documents=true or max_asset_data_size to skip large files")
+        elif "entity too large" in description.lower():
+            suggestions.append("Request entity too large - reduce max_group_size or set max_asset_data_size")
+
+        if suggestions:
+            error_msg += f" | Suggestions: {'; '.join(suggestions)}"
+
+        _LOGGER.error(error_msg)
+
     def _check_telegram_photo_limits(
         self,
         data: bytes,
@@ -359,9 +433,6 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
             - width: Image width in pixels (None if PIL not available)
             - height: Image height in pixels (None if PIL not available)
         """
-        TELEGRAM_MAX_PHOTO_SIZE = 10 * 1024 * 1024  # 10 MB
-        TELEGRAM_MAX_DIMENSION_SUM = 10000
-
         # Check file size
         if len(data) > TELEGRAM_MAX_PHOTO_SIZE:
             return True, f"size {len(data)} bytes exceeds {TELEGRAM_MAX_PHOTO_SIZE} bytes limit", None, None
@@ -388,73 +459,6 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
             _LOGGER.debug("Failed to check photo dimensions: %s", e)
             return False, None, None, None
 
-    def _downsize_photo(
-        self,
-        data: bytes,
-        max_dimension_sum: int = 10000,
-        max_file_size: int = 9 * 1024 * 1024,  # 9 MB to be safe
-    ) -> tuple[bytes | None, str | None]:
-        """Downsize photo to fit within Telegram limits.
-
-        Args:
-            data: Original photo bytes
-            max_dimension_sum: Maximum sum of width + height
-            max_file_size: Maximum file size in bytes
-
-        Returns:
-            Tuple of (downsized_data, error)
-            - downsized_data: Downsized photo bytes (None if failed)
-            - error: Error message (None if successful)
-        """
-        try:
-            from PIL import Image
-            import io
-
-            img = Image.open(io.BytesIO(data))
-            width, height = img.size
-            dimension_sum = width + height
-
-            # Calculate scale factor based on dimensions
-            if dimension_sum > max_dimension_sum:
-                scale = max_dimension_sum / dimension_sum
-                new_width = int(width * scale)
-                new_height = int(height * scale)
-
-                _LOGGER.info(
-                    "Downsizing photo from %dx%d to %dx%d to fit Telegram limits",
-                    width, height, new_width, new_height
-                )
-
-                # Resize with high-quality Lanczos resampling
-                img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-            # Save with progressive quality reduction until size fits
-            output = io.BytesIO()
-            quality = 95
-
-            while quality >= 50:
-                output.seek(0)
-                output.truncate()
-                img.save(output, format='JPEG', quality=quality, optimize=True)
-                output_size = output.tell()
-
-                if output_size <= max_file_size:
-                    _LOGGER.debug(
-                        "Photo downsized successfully: %d bytes (quality=%d)",
-                        output_size, quality
-                    )
-                    return output.getvalue(), None
-
-                quality -= 5
-
-            # If we can't get it small enough, return error
-            return None, f"Unable to downsize photo below {max_file_size} bytes (final size: {output_size} bytes at quality {quality + 5})"
-
-        except ImportError:
-            return None, "PIL not available, cannot downsize photo"
-        except Exception as e:
-            _LOGGER.error("Failed to downsize photo: %s", e)
-            return None, f"Failed to downsize photo: {e}"
 
     async def _send_telegram_photo(
         self,
@@ -510,16 +514,13 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                         caption, reply_to_message_id, parse_mode
                     )
                 else:
-                    # Try to downsize the photo
-                    _LOGGER.info("Photo %s, attempting to downsize", reason)
-                    downsized_data, error = self._downsize_photo(data)
-                    if downsized_data:
-                        data = downsized_data
-                    else:
-                        return {
-                            "success": False,
-                            "error": f"Photo exceeds Telegram limits and downsize failed: {error}",
-                        }
+                    # Skip oversized photo
+                    _LOGGER.warning("Photo %s, skipping (set send_large_photos_as_documents=true to send as document)", reason)
+                    return {
+                        "success": False,
+                        "error": f"Photo {reason}",
+                        "skipped": True,
+                    }
 
             # Build multipart form
             form = FormData()
@@ -546,7 +547,13 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                         "message_id": result.get("result", {}).get("message_id"),
                     }
                 else:
-                    _LOGGER.error("Telegram API error: %s", result)
+                    # Log detailed error with diagnostics
+                    self._log_telegram_error(
+                        error_code=result.get("error_code"),
+                        description=result.get("description", "Unknown Telegram error"),
+                        data=data,
+                        media_type="photo",
+                    )
                     return {
                         "success": False,
                         "error": result.get("description", "Unknown Telegram error"),
@@ -623,7 +630,13 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                         "message_id": result.get("result", {}).get("message_id"),
                     }
                 else:
-                    _LOGGER.error("Telegram API error: %s", result)
+                    # Log detailed error with diagnostics
+                    self._log_telegram_error(
+                        error_code=result.get("error_code"),
+                        description=result.get("description", "Unknown Telegram error"),
+                        data=data,
+                        media_type="video",
+                    )
                     return {
                         "success": False,
                         "error": result.get("description", "Unknown Telegram error"),
@@ -674,7 +687,13 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                         "message_id": result.get("result", {}).get("message_id"),
                     }
                 else:
-                    _LOGGER.error("Telegram API error: %s", result)
+                    # Log detailed error with diagnostics
+                    self._log_telegram_error(
+                        error_code=result.get("error_code"),
+                        description=result.get("description", "Unknown Telegram error"),
+                        data=data,
+                        media_type="document",
+                    )
                     return {
                         "success": False,
                         "error": result.get("description", "Unknown Telegram error"),
@@ -756,7 +775,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
             _LOGGER.debug("Sending chunk %d/%d as media group (%d items)", chunk_idx + 1, len(chunks), len(chunk))
 
             # Download all media files for this chunk
-            media_files: list[tuple[str, bytes, str]] = []
+            media_files: list[tuple[str, bytes, str]] = []  # (type, data, filename)
             oversized_photos: list[tuple[bytes, str | None]] = []  # For send_large_photos_as_documents=true
             skipped_count = 0
 
@@ -808,15 +827,10 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                                     _LOGGER.info("Photo %d %s, will send as document", i, reason)
                                     continue
                                 else:
-                                    # Try to downsize the photo
-                                    _LOGGER.info("Photo %d %s, attempting to downsize", i, reason)
-                                    downsized_data, error = self._downsize_photo(data)
-                                    if downsized_data:
-                                        data = downsized_data
-                                    else:
-                                        _LOGGER.error("Failed to downsize photo %d: %s, skipping", i, error)
-                                        skipped_count += 1
-                                        continue
+                                    # Skip oversized photo
+                                    _LOGGER.warning("Photo %d %s, skipping (set send_large_photos_as_documents=true to send as document)", i, reason)
+                                    skipped_count += 1
+                                    continue
 
                         ext = "jpg" if media_type == "photo" else "mp4"
                         filename = f"media_{chunk_idx * max_group_size + i}.{ext}"
@@ -877,7 +891,26 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                             ]
                             all_message_ids.extend(chunk_message_ids)
                         else:
-                            _LOGGER.error("Telegram API error for chunk %d: %s", chunk_idx + 1, result)
+                            # Log detailed error for media group with total size info
+                            total_size = sum(len(d) for _, d, _ in media_files)
+                            _LOGGER.error(
+                                "Telegram API error for chunk %d/%d: %s | Media count: %d | Total size: %d bytes (%.2f MB)",
+                                chunk_idx + 1, len(chunks),
+                                result.get("description", "Unknown Telegram error"),
+                                len(media_files),
+                                total_size,
+                                total_size / (1024 * 1024)
+                            )
+                            # Log detailed diagnostics for the first photo in the group
+                            for media_type, data, _ in media_files:
+                                if media_type == "photo":
+                                    self._log_telegram_error(
+                                        error_code=result.get("error_code"),
+                                        description=result.get("description", "Unknown Telegram error"),
+                                        data=data,
+                                        media_type="photo",
+                                    )
+                                    break  # Only log details for first photo
                             return {
                                 "success": False,
                                 "error": result.get("description", "Unknown Telegram error"),
