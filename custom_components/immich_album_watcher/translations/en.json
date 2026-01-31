@@ -190,6 +190,10 @@
                 "max_asset_data_size": {
                     "name": "Max Asset Data Size",
                     "description": "Maximum asset size in bytes. Assets exceeding this limit will be skipped. Leave empty for no limit."
+                },
+                "send_large_photos_as_documents": {
+                    "name": "Send Large Photos As Documents",
+                    "description": "How to handle photos exceeding Telegram's limits (10MB or 10000px dimension sum). If true, send as documents. If false, downsize to fit limits."
                 }
             }
         }

@@ -189,6 +189,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         chunk_delay: int = 0,
         wait_for_response: bool = True,
         max_asset_data_size: int | None = None,
+        send_large_photos_as_documents: bool = False,
     ) -> ServiceResponse:
         """Send notification to Telegram.
 
@@ -218,6 +219,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                     max_group_size=max_group_size,
                     chunk_delay=chunk_delay,
                     max_asset_data_size=max_asset_data_size,
+                    send_large_photos_as_documents=send_large_photos_as_documents,
                 )
             )
             return {"success": True, "status": "queued", "message": "Notification queued for background processing"}
@@ -234,6 +236,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
             max_group_size=max_group_size,
             chunk_delay=chunk_delay,
             max_asset_data_size=max_asset_data_size,
+            send_large_photos_as_documents=send_large_photos_as_documents,
         )
 
     async def _execute_telegram_notification(
@@ -248,6 +251,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         max_group_size: int = 10,
         chunk_delay: int = 0,
         max_asset_data_size: int | None = None,
+        send_large_photos_as_documents: bool = False,
     ) -> ServiceResponse:
         """Execute the Telegram notification (internal method)."""
         import json
@@ -274,7 +278,8 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         # Handle single photo
         if len(urls) == 1 and urls[0].get("type", "photo") == "photo":
             return await self._send_telegram_photo(
-                session, token, chat_id, urls[0].get("url"), caption, reply_to_message_id, parse_mode, max_asset_data_size
+                session, token, chat_id, urls[0].get("url"), caption, reply_to_message_id, parse_mode,
+                max_asset_data_size, send_large_photos_as_documents
             )
 
         # Handle single video
@@ -285,7 +290,8 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
 
         # Handle multiple items - send as media group(s)
         return await self._send_telegram_media_group(
-            session, token, chat_id, urls, caption, reply_to_message_id, max_group_size, chunk_delay, parse_mode, max_asset_data_size
+            session, token, chat_id, urls, caption, reply_to_message_id, max_group_size, chunk_delay, parse_mode,
+            max_asset_data_size, send_large_photos_as_documents
         )
 
     async def _send_telegram_message(
@@ -336,6 +342,120 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
             _LOGGER.error("Telegram message send failed: %s", err)
             return {"success": False, "error": str(err)}
 
+    def _check_telegram_photo_limits(
+        self,
+        data: bytes,
+    ) -> tuple[bool, str | None, int | None, int | None]:
+        """Check if photo data exceeds Telegram photo limits.
+
+        Telegram limits for photos:
+        - Max file size: 10 MB
+        - Max dimension sum: ~10,000 pixels (width + height)
+
+        Returns:
+            Tuple of (exceeds_limits, reason, width, height)
+            - exceeds_limits: True if photo exceeds limits
+            - reason: Human-readable reason (None if within limits)
+            - width: Image width in pixels (None if PIL not available)
+            - height: Image height in pixels (None if PIL not available)
+        """
+        TELEGRAM_MAX_PHOTO_SIZE = 10 * 1024 * 1024  # 10 MB
+        TELEGRAM_MAX_DIMENSION_SUM = 10000
+
+        # Check file size
+        if len(data) > TELEGRAM_MAX_PHOTO_SIZE:
+            return True, f"size {len(data)} bytes exceeds {TELEGRAM_MAX_PHOTO_SIZE} bytes limit", None, None
+
+        # Try to check dimensions using PIL
+        try:
+            from PIL import Image
+            import io
+
+            img = Image.open(io.BytesIO(data))
+            width, height = img.size
+            dimension_sum = width + height
+
+            if dimension_sum > TELEGRAM_MAX_DIMENSION_SUM:
+                return True, f"dimensions {width}x{height} (sum={dimension_sum}) exceed {TELEGRAM_MAX_DIMENSION_SUM} limit", width, height
+
+            return False, None, width, height
+        except ImportError:
+            # PIL not available, can't check dimensions
+            _LOGGER.debug("PIL not available, skipping dimension check")
+            return False, None, None, None
+        except Exception as e:
+            # Failed to check dimensions
+            _LOGGER.debug("Failed to check photo dimensions: %s", e)
+            return False, None, None, None
+
+    def _downsize_photo(
+        self,
+        data: bytes,
+        max_dimension_sum: int = 10000,
+        max_file_size: int = 9 * 1024 * 1024,  # 9 MB to be safe
+    ) -> tuple[bytes | None, str | None]:
+        """Downsize photo to fit within Telegram limits.
+
+        Args:
+            data: Original photo bytes
+            max_dimension_sum: Maximum sum of width + height
+            max_file_size: Maximum file size in bytes
+
+        Returns:
+            Tuple of (downsized_data, error)
+            - downsized_data: Downsized photo bytes (None if failed)
+            - error: Error message (None if successful)
+        """
+        try:
+            from PIL import Image
+            import io
+
+            img = Image.open(io.BytesIO(data))
+            width, height = img.size
+            dimension_sum = width + height
+
+            # Calculate scale factor based on dimensions
+            if dimension_sum > max_dimension_sum:
+                scale = max_dimension_sum / dimension_sum
+                new_width = int(width * scale)
+                new_height = int(height * scale)
+
+                _LOGGER.info(
+                    "Downsizing photo from %dx%d to %dx%d to fit Telegram limits",
+                    width, height, new_width, new_height
+                )
+
+                # Resize with high-quality Lanczos resampling
+                img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+            # Save with progressive quality reduction until size fits
+            output = io.BytesIO()
+            quality = 95
+
+            while quality >= 50:
+                output.seek(0)
+                output.truncate()
+                img.save(output, format='JPEG', quality=quality, optimize=True)
+                output_size = output.tell()
+
+                if output_size <= max_file_size:
+                    _LOGGER.debug(
+                        "Photo downsized successfully: %d bytes (quality=%d)",
+                        output_size, quality
+                    )
+                    return output.getvalue(), None
+
+                quality -= 5
+
+            # If we can't get it small enough, return error
+            return None, f"Unable to downsize photo below {max_file_size} bytes (final size: {output_size} bytes at quality {quality + 5})"
+
+        except ImportError:
+            return None, "PIL not available, cannot downsize photo"
+        except Exception as e:
+            _LOGGER.error("Failed to downsize photo: %s", e)
+            return None, f"Failed to downsize photo: {e}"
+
     async def _send_telegram_photo(
         self,
         session: Any,
@@ -346,6 +466,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         reply_to_message_id: int | None = None,
         parse_mode: str = "HTML",
         max_asset_data_size: int | None = None,
+        send_large_photos_as_documents: bool = False,
     ) -> ServiceResponse:
         """Send a single photo to Telegram."""
         import aiohttp
@@ -366,7 +487,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                 data = await resp.read()
                 _LOGGER.debug("Downloaded photo: %d bytes", len(data))
 
-            # Check if photo exceeds max size limit
+            # Check if photo exceeds max size limit (user-defined limit)
             if max_asset_data_size is not None and len(data) > max_asset_data_size:
                 _LOGGER.warning(
                     "Photo size (%d bytes) exceeds max_asset_data_size limit (%d bytes), skipping",
@@ -377,6 +498,28 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                     "error": f"Photo size ({len(data)} bytes) exceeds max_asset_data_size limit ({max_asset_data_size} bytes)",
                     "skipped": True,
                 }
+
+            # Check if photo exceeds Telegram's photo limits
+            exceeds_limits, reason, width, height = self._check_telegram_photo_limits(data)
+            if exceeds_limits:
+                if send_large_photos_as_documents:
+                    # Send as document instead
+                    _LOGGER.info("Photo %s, sending as document", reason)
+                    return await self._send_telegram_document(
+                        session, token, chat_id, data, "photo.jpg",
+                        caption, reply_to_message_id, parse_mode
+                    )
+                else:
+                    # Try to downsize the photo
+                    _LOGGER.info("Photo %s, attempting to downsize", reason)
+                    downsized_data, error = self._downsize_photo(data)
+                    if downsized_data:
+                        data = downsized_data
+                    else:
+                        return {
+                            "success": False,
+                            "error": f"Photo exceeds Telegram limits and downsize failed: {error}",
+                        }
 
             # Build multipart form
             form = FormData()
@@ -490,6 +633,57 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
             _LOGGER.error("Telegram video upload failed: %s", err)
             return {"success": False, "error": str(err)}
 
+    async def _send_telegram_document(
+        self,
+        session: Any,
+        token: str,
+        chat_id: str,
+        data: bytes,
+        filename: str = "photo.jpg",
+        caption: str | None = None,
+        reply_to_message_id: int | None = None,
+        parse_mode: str = "HTML",
+    ) -> ServiceResponse:
+        """Send a photo as a document to Telegram (for oversized photos)."""
+        import aiohttp
+        from aiohttp import FormData
+
+        try:
+            # Build multipart form
+            form = FormData()
+            form.add_field("chat_id", chat_id)
+            form.add_field("document", data, filename=filename, content_type="image/jpeg")
+            form.add_field("parse_mode", parse_mode)
+
+            if caption:
+                form.add_field("caption", caption)
+
+            if reply_to_message_id:
+                form.add_field("reply_to_message_id", str(reply_to_message_id))
+
+            # Send to Telegram
+            telegram_url = f"https://api.telegram.org/bot{token}/sendDocument"
+
+            _LOGGER.debug("Uploading oversized photo as document to Telegram (%d bytes)", len(data))
+            async with session.post(telegram_url, data=form) as response:
+                result = await response.json()
+                _LOGGER.debug("Telegram API response: status=%d, ok=%s", response.status, result.get("ok"))
+                if response.status == 200 and result.get("ok"):
+                    return {
+                        "success": True,
+                        "message_id": result.get("result", {}).get("message_id"),
+                    }
+                else:
+                    _LOGGER.error("Telegram API error: %s", result)
+                    return {
+                        "success": False,
+                        "error": result.get("description", "Unknown Telegram error"),
+                        "error_code": result.get("error_code"),
+                    }
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Telegram document upload failed: %s", err)
+            return {"success": False, "error": str(err)}
+
     async def _send_telegram_media_group(
         self,
         session: Any,
@@ -502,6 +696,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         chunk_delay: int = 0,
         parse_mode: str = "HTML",
         max_asset_data_size: int | None = None,
+        send_large_photos_as_documents: bool = False,
     ) -> ServiceResponse:
         """Send media URLs to Telegram as media group(s).
 
@@ -542,7 +737,8 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                 if media_type == "photo":
                     _LOGGER.debug("Sending chunk %d/%d as single photo", chunk_idx + 1, len(chunks))
                     result = await self._send_telegram_photo(
-                        session, token, chat_id, url, chunk_caption, chunk_reply_to, parse_mode, max_asset_data_size
+                        session, token, chat_id, url, chunk_caption, chunk_reply_to, parse_mode,
+                        max_asset_data_size, send_large_photos_as_documents
                     )
                 else:  # video
                     _LOGGER.debug("Sending chunk %d/%d as single video", chunk_idx + 1, len(chunks))
@@ -561,7 +757,9 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
 
             # Download all media files for this chunk
             media_files: list[tuple[str, bytes, str]] = []
+            oversized_photos: list[tuple[bytes, str | None]] = []  # For send_large_photos_as_documents=true
             skipped_count = 0
+
             for i, item in enumerate(chunk):
                 url = item.get("url")
                 media_type = item.get("type", "photo")
@@ -589,7 +787,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                         data = await resp.read()
                         _LOGGER.debug("Downloaded media %d: %d bytes", chunk_idx * max_group_size + i, len(data))
 
-                        # Check if media exceeds max size limit
+                        # Check if media exceeds max_asset_data_size limit (user-defined limit for skipping)
                         if max_asset_data_size is not None and len(data) > max_asset_data_size:
                             _LOGGER.warning(
                                 "Media %d size (%d bytes) exceeds max_asset_data_size limit (%d bytes), skipping",
@@ -597,6 +795,28 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                             )
                             skipped_count += 1
                             continue
+
+                        # For photos, check Telegram limits
+                        if media_type == "photo":
+                            exceeds_limits, reason, width, height = self._check_telegram_photo_limits(data)
+                            if exceeds_limits:
+                                if send_large_photos_as_documents:
+                                    # Separate this photo to send as document later
+                                    # Caption only on first item of first chunk
+                                    photo_caption = caption if chunk_idx == 0 and i == 0 and len(media_files) == 0 else None
+                                    oversized_photos.append((data, photo_caption))
+                                    _LOGGER.info("Photo %d %s, will send as document", i, reason)
+                                    continue
+                                else:
+                                    # Try to downsize the photo
+                                    _LOGGER.info("Photo %d %s, attempting to downsize", i, reason)
+                                    downsized_data, error = self._downsize_photo(data)
+                                    if downsized_data:
+                                        data = downsized_data
+                                    else:
+                                        _LOGGER.error("Failed to downsize photo %d: %s, skipping", i, error)
+                                        skipped_count += 1
+                                        continue
 
                         ext = "jpg" if media_type == "photo" else "mp4"
                         filename = f"media_{chunk_idx * max_group_size + i}.{ext}"
@@ -608,67 +828,82 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                     }
 
             # Skip this chunk if all files were filtered out
-            if not media_files:
-                _LOGGER.info("Chunk %d/%d: all %d media items skipped due to size limit",
+            if not media_files and not oversized_photos:
+                _LOGGER.info("Chunk %d/%d: all %d media items skipped",
                             chunk_idx + 1, len(chunks), len(chunk))
                 continue
 
-            # Build multipart form
-            form = FormData()
-            form.add_field("chat_id", chat_id)
+            # Send media group if we have normal-sized files
+            if media_files:
+                # Build multipart form
+                form = FormData()
+                form.add_field("chat_id", chat_id)
 
-            # Only use reply_to_message_id for the first chunk
-            if chunk_idx == 0 and reply_to_message_id:
-                form.add_field("reply_to_message_id", str(reply_to_message_id))
+                # Only use reply_to_message_id for the first chunk
+                if chunk_idx == 0 and reply_to_message_id:
+                    form.add_field("reply_to_message_id", str(reply_to_message_id))
 
-            # Build media JSON with attach:// references
-            media_json = []
-            for i, (media_type, data, filename) in enumerate(media_files):
-                attach_name = f"file{i}"
-                media_item: dict[str, Any] = {
-                    "type": media_type,
-                    "media": f"attach://{attach_name}",
-                }
-                # Only add caption to the first item of the first chunk
-                if chunk_idx == 0 and i == 0 and caption:
-                    media_item["caption"] = caption
-                    media_item["parse_mode"] = parse_mode
-                media_json.append(media_item)
+                # Build media JSON with attach:// references
+                media_json = []
+                for i, (media_type, data, filename) in enumerate(media_files):
+                    attach_name = f"file{i}"
+                    media_item: dict[str, Any] = {
+                        "type": media_type,
+                        "media": f"attach://{attach_name}",
+                    }
+                    # Only add caption to the first item of the first chunk (if no oversized photos with caption)
+                    if chunk_idx == 0 and i == 0 and caption and not oversized_photos:
+                        media_item["caption"] = caption
+                        media_item["parse_mode"] = parse_mode
+                    media_json.append(media_item)
 
-                content_type = "image/jpeg" if media_type == "photo" else "video/mp4"
-                form.add_field(attach_name, data, filename=filename, content_type=content_type)
+                    content_type = "image/jpeg" if media_type == "photo" else "video/mp4"
+                    form.add_field(attach_name, data, filename=filename, content_type=content_type)
 
-            form.add_field("media", json.dumps(media_json))
+                form.add_field("media", json.dumps(media_json))
 
-            # Send to Telegram
-            telegram_url = f"https://api.telegram.org/bot{token}/sendMediaGroup"
+                # Send to Telegram
+                telegram_url = f"https://api.telegram.org/bot{token}/sendMediaGroup"
 
-            try:
-                _LOGGER.debug("Uploading media group chunk %d/%d (%d files) to Telegram",
-                             chunk_idx + 1, len(chunks), len(media_files))
-                async with session.post(telegram_url, data=form) as response:
-                    result = await response.json()
-                    _LOGGER.debug("Telegram API response: status=%d, ok=%s", response.status, result.get("ok"))
-                    if response.status == 200 and result.get("ok"):
-                        chunk_message_ids = [
-                            msg.get("message_id") for msg in result.get("result", [])
-                        ]
-                        all_message_ids.extend(chunk_message_ids)
-                    else:
-                        _LOGGER.error("Telegram API error for chunk %d: %s", chunk_idx + 1, result)
-                        return {
-                            "success": False,
-                            "error": result.get("description", "Unknown Telegram error"),
-                            "error_code": result.get("error_code"),
-                            "failed_at_chunk": chunk_idx + 1,
-                        }
-            except aiohttp.ClientError as err:
-                _LOGGER.error("Telegram upload failed for chunk %d: %s", chunk_idx + 1, err)
-                return {
-                    "success": False,
-                    "error": str(err),
-                    "failed_at_chunk": chunk_idx + 1,
-                }
+                try:
+                    _LOGGER.debug("Uploading media group chunk %d/%d (%d files) to Telegram",
+                                 chunk_idx + 1, len(chunks), len(media_files))
+                    async with session.post(telegram_url, data=form) as response:
+                        result = await response.json()
+                        _LOGGER.debug("Telegram API response: status=%d, ok=%s", response.status, result.get("ok"))
+                        if response.status == 200 and result.get("ok"):
+                            chunk_message_ids = [
+                                msg.get("message_id") for msg in result.get("result", [])
+                            ]
+                            all_message_ids.extend(chunk_message_ids)
+                        else:
+                            _LOGGER.error("Telegram API error for chunk %d: %s", chunk_idx + 1, result)
+                            return {
+                                "success": False,
+                                "error": result.get("description", "Unknown Telegram error"),
+                                "error_code": result.get("error_code"),
+                                "failed_at_chunk": chunk_idx + 1,
+                            }
+                except aiohttp.ClientError as err:
+                    _LOGGER.error("Telegram upload failed for chunk %d: %s", chunk_idx + 1, err)
+                    return {
+                        "success": False,
+                        "error": str(err),
+                        "failed_at_chunk": chunk_idx + 1,
+                    }
+
+            # Send oversized photos as documents
+            for i, (data, photo_caption) in enumerate(oversized_photos):
+                _LOGGER.debug("Sending oversized photo %d/%d as document", i + 1, len(oversized_photos))
+                result = await self._send_telegram_document(
+                    session, token, chat_id, data, f"photo_{i}.jpg",
+                    photo_caption, None, parse_mode
+                )
+                if result.get("success"):
+                    all_message_ids.append(result.get("message_id"))
+                else:
+                    _LOGGER.error("Failed to send oversized photo as document: %s", result.get("error"))
+                    # Continue with other photos even if one fails
 
         return {
             "success": True,

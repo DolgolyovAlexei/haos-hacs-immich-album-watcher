@@ -214,6 +214,7 @@ data:
 | `chunk_delay` | Delay in milliseconds between sending multiple groups (0-60000). Useful for rate limiting. Default: 0 | No |
 | `wait_for_response` | Wait for Telegram to finish processing. Set to `false` for fire-and-forget (automation continues immediately). Default: `true` | No |
 | `max_asset_data_size` | Maximum asset size in bytes. Assets exceeding this limit will be skipped. Default: no limit | No |
+| `send_large_photos_as_documents` | Handle photos exceeding Telegram limits (10MB or 10000px dimension sum). If `true`, send as documents. If `false`, downsize to fit. Default: `false` | No |
 
 The service returns a response with `success` status and `message_id` (single message), `message_ids` (media group), or `groups_sent` (number of groups when split). When `wait_for_response` is `false`, the service returns immediately with `{"success": true, "status": "queued"}` while processing continues in the background.
 
