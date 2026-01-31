@@ -42,7 +42,7 @@ from .const import (
     DOMAIN,
     SERVICE_GET_RECENT_ASSETS,
     SERVICE_REFRESH,
-    SERVICE_SEND_TELEGRAM_MEDIA_GROUP,
+    SERVICE_SEND_TELEGRAM_NOTIFICATION,
 )
 from .coordinator import AlbumData, ImmichAlbumWatcherCoordinator
 
@@ -99,15 +99,22 @@ async def async_setup_entry(
     )
 
     platform.async_register_entity_service(
-        SERVICE_SEND_TELEGRAM_MEDIA_GROUP,
+        SERVICE_SEND_TELEGRAM_NOTIFICATION,
         {
             vol.Optional("bot_token"): str,
             vol.Required("chat_id"): vol.Coerce(str),
-            vol.Required("urls"): vol.All(list, vol.Length(min=1, max=10)),
+            vol.Optional("urls"): list,
             vol.Optional("caption"): str,
             vol.Optional("reply_to_message_id"): vol.Coerce(int),
+            vol.Optional("disable_web_page_preview"): bool,
+            vol.Optional("max_group_size", default=10): vol.All(
+                vol.Coerce(int), vol.Range(min=2, max=10)
+            ),
+            vol.Optional("chunk_delay", default=0): vol.All(
+                vol.Coerce(int), vol.Range(min=0, max=60000)
+            ),
         },
-        "async_send_telegram_media_group",
+        "async_send_telegram_notification",
         supports_response=SupportsResponse.ONLY,
     )
 
@@ -167,15 +174,24 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         assets = await self.coordinator.async_get_recent_assets(count)
         return {"assets": assets}
 
-    async def async_send_telegram_media_group(
+    async def async_send_telegram_notification(
         self,
         chat_id: str,
-        urls: list[dict[str, str]],
+        urls: list[dict[str, str]] | None = None,
         bot_token: str | None = None,
         caption: str | None = None,
         reply_to_message_id: int | None = None,
+        disable_web_page_preview: bool | None = None,
+        max_group_size: int = 10,
+        chunk_delay: int = 0,
     ) -> ServiceResponse:
-        """Send media URLs to Telegram as a media group.
+        """Send notification to Telegram.
+
+        Supports:
+        - Empty URLs: sends a simple text message
+        - Single photo: uses sendPhoto API
+        - Single video: uses sendVideo API
+        - Multiple items: uses sendMediaGroup API (splits into multiple groups if needed)
 
         Each item in urls should be a dict with 'url' and 'type' (photo/video).
         Downloads media and uploads to Telegram to bypass CORS restrictions.
@@ -195,81 +211,63 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
 
         session = async_get_clientsession(self.hass)
 
-        # Download all media files
-        media_files: list[tuple[str, bytes, str]] = []
-        for i, item in enumerate(urls):
-            url = item.get("url")
-            media_type = item.get("type", "photo")
+        # Handle empty URLs - send simple text message
+        if not urls:
+            return await self._send_telegram_message(
+                session, token, chat_id, caption or "", reply_to_message_id, disable_web_page_preview
+            )
 
-            if not url:
-                return {
-                    "success": False,
-                    "error": f"Missing 'url' in item {i}",
-                }
+        # Handle single photo
+        if len(urls) == 1 and urls[0].get("type", "photo") == "photo":
+            return await self._send_telegram_photo(
+                session, token, chat_id, urls[0].get("url"), caption, reply_to_message_id
+            )
 
-            if media_type not in ("photo", "video"):
-                return {
-                    "success": False,
-                    "error": f"Invalid type '{media_type}' in item {i}. Must be 'photo' or 'video'.",
-                }
+        # Handle single video
+        if len(urls) == 1 and urls[0].get("type") == "video":
+            return await self._send_telegram_video(
+                session, token, chat_id, urls[0].get("url"), caption, reply_to_message_id
+            )
 
-            try:
-                _LOGGER.debug("Downloading media %d from %s", i, url[:80])
-                async with session.get(url) as resp:
-                    if resp.status != 200:
-                        return {
-                            "success": False,
-                            "error": f"Failed to download media {i}: HTTP {resp.status}",
-                        }
-                    data = await resp.read()
-                    ext = "jpg" if media_type == "photo" else "mp4"
-                    filename = f"media_{i}.{ext}"
-                    media_files.append((media_type, data, filename))
-                    _LOGGER.debug("Downloaded media %d: %d bytes", i, len(data))
-            except aiohttp.ClientError as err:
-                return {
-                    "success": False,
-                    "error": f"Failed to download media {i}: {err}",
-                }
+        # Handle multiple items - send as media group(s)
+        return await self._send_telegram_media_group(
+            session, token, chat_id, urls, caption, reply_to_message_id, max_group_size, chunk_delay
+        )
 
-        # Build multipart form
-        form = FormData()
-        form.add_field("chat_id", chat_id)
+    async def _send_telegram_message(
+        self,
+        session: Any,
+        token: str,
+        chat_id: str,
+        text: str,
+        reply_to_message_id: int | None = None,
+        disable_web_page_preview: bool | None = None,
+    ) -> ServiceResponse:
+        """Send a simple text message to Telegram."""
+        import aiohttp
+
+        telegram_url = f"https://api.telegram.org/bot{token}/sendMessage"
+
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "text": text or "Notification from Home Assistant",
+        }
 
         if reply_to_message_id:
-            form.add_field("reply_to_message_id", str(reply_to_message_id))
+            payload["reply_to_message_id"] = reply_to_message_id
 
-        # Build media JSON with attach:// references
-        media_json = []
-        for i, (media_type, data, filename) in enumerate(media_files):
-            attach_name = f"file{i}"
-            media_item: dict[str, Any] = {
-                "type": media_type,
-                "media": f"attach://{attach_name}",
-            }
-            if i == 0 and caption:
-                media_item["caption"] = caption
-            media_json.append(media_item)
-
-            content_type = "image/jpeg" if media_type == "photo" else "video/mp4"
-            form.add_field(attach_name, data, filename=filename, content_type=content_type)
-
-        form.add_field("media", json.dumps(media_json))
-
-        # Send to Telegram
-        telegram_url = f"https://api.telegram.org/bot{token}/sendMediaGroup"
+        if disable_web_page_preview is not None:
+            payload["disable_web_page_preview"] = disable_web_page_preview
 
         try:
-            _LOGGER.debug("Uploading %d files to Telegram", len(media_files))
-            async with session.post(telegram_url, data=form) as response:
+            _LOGGER.debug("Sending text message to Telegram")
+            async with session.post(telegram_url, json=payload) as response:
                 result = await response.json()
                 _LOGGER.debug("Telegram API response: status=%d, ok=%s", response.status, result.get("ok"))
                 if response.status == 200 and result.get("ok"):
                     return {
                         "success": True,
-                        "message_ids": [
-                            msg.get("message_id") for msg in result.get("result", [])
-                        ],
+                        "message_id": result.get("result", {}).get("message_id"),
                     }
                 else:
                     _LOGGER.error("Telegram API error: %s", result)
@@ -279,8 +277,298 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                         "error_code": result.get("error_code"),
                     }
         except aiohttp.ClientError as err:
-            _LOGGER.error("Telegram upload failed: %s", err)
+            _LOGGER.error("Telegram message send failed: %s", err)
             return {"success": False, "error": str(err)}
+
+    async def _send_telegram_photo(
+        self,
+        session: Any,
+        token: str,
+        chat_id: str,
+        url: str | None,
+        caption: str | None = None,
+        reply_to_message_id: int | None = None,
+    ) -> ServiceResponse:
+        """Send a single photo to Telegram."""
+        import aiohttp
+        from aiohttp import FormData
+
+        if not url:
+            return {"success": False, "error": "Missing 'url' for photo"}
+
+        try:
+            # Download the photo
+            _LOGGER.debug("Downloading photo from %s", url[:80])
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return {
+                        "success": False,
+                        "error": f"Failed to download photo: HTTP {resp.status}",
+                    }
+                data = await resp.read()
+                _LOGGER.debug("Downloaded photo: %d bytes", len(data))
+
+            # Build multipart form
+            form = FormData()
+            form.add_field("chat_id", chat_id)
+            form.add_field("photo", data, filename="photo.jpg", content_type="image/jpeg")
+
+            if caption:
+                form.add_field("caption", caption)
+
+            if reply_to_message_id:
+                form.add_field("reply_to_message_id", str(reply_to_message_id))
+
+            # Send to Telegram
+            telegram_url = f"https://api.telegram.org/bot{token}/sendPhoto"
+
+            _LOGGER.debug("Uploading photo to Telegram")
+            async with session.post(telegram_url, data=form) as response:
+                result = await response.json()
+                _LOGGER.debug("Telegram API response: status=%d, ok=%s", response.status, result.get("ok"))
+                if response.status == 200 and result.get("ok"):
+                    return {
+                        "success": True,
+                        "message_id": result.get("result", {}).get("message_id"),
+                    }
+                else:
+                    _LOGGER.error("Telegram API error: %s", result)
+                    return {
+                        "success": False,
+                        "error": result.get("description", "Unknown Telegram error"),
+                        "error_code": result.get("error_code"),
+                    }
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Telegram photo upload failed: %s", err)
+            return {"success": False, "error": str(err)}
+
+    async def _send_telegram_video(
+        self,
+        session: Any,
+        token: str,
+        chat_id: str,
+        url: str | None,
+        caption: str | None = None,
+        reply_to_message_id: int | None = None,
+    ) -> ServiceResponse:
+        """Send a single video to Telegram."""
+        import aiohttp
+        from aiohttp import FormData
+
+        if not url:
+            return {"success": False, "error": "Missing 'url' for video"}
+
+        try:
+            # Download the video
+            _LOGGER.debug("Downloading video from %s", url[:80])
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return {
+                        "success": False,
+                        "error": f"Failed to download video: HTTP {resp.status}",
+                    }
+                data = await resp.read()
+                _LOGGER.debug("Downloaded video: %d bytes", len(data))
+
+            # Build multipart form
+            form = FormData()
+            form.add_field("chat_id", chat_id)
+            form.add_field("video", data, filename="video.mp4", content_type="video/mp4")
+
+            if caption:
+                form.add_field("caption", caption)
+
+            if reply_to_message_id:
+                form.add_field("reply_to_message_id", str(reply_to_message_id))
+
+            # Send to Telegram
+            telegram_url = f"https://api.telegram.org/bot{token}/sendVideo"
+
+            _LOGGER.debug("Uploading video to Telegram")
+            async with session.post(telegram_url, data=form) as response:
+                result = await response.json()
+                _LOGGER.debug("Telegram API response: status=%d, ok=%s", response.status, result.get("ok"))
+                if response.status == 200 and result.get("ok"):
+                    return {
+                        "success": True,
+                        "message_id": result.get("result", {}).get("message_id"),
+                    }
+                else:
+                    _LOGGER.error("Telegram API error: %s", result)
+                    return {
+                        "success": False,
+                        "error": result.get("description", "Unknown Telegram error"),
+                        "error_code": result.get("error_code"),
+                    }
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Telegram video upload failed: %s", err)
+            return {"success": False, "error": str(err)}
+
+    async def _send_telegram_media_group(
+        self,
+        session: Any,
+        token: str,
+        chat_id: str,
+        urls: list[dict[str, str]],
+        caption: str | None = None,
+        reply_to_message_id: int | None = None,
+        max_group_size: int = 10,
+        chunk_delay: int = 0,
+    ) -> ServiceResponse:
+        """Send media URLs to Telegram as media group(s).
+
+        If urls list exceeds max_group_size, splits into multiple media groups.
+        For chunks with single items, uses sendPhoto/sendVideo APIs.
+        Applies chunk_delay (in milliseconds) between groups if specified.
+        """
+        import json
+        import asyncio
+        import aiohttp
+        from aiohttp import FormData
+
+        # Split URLs into chunks based on max_group_size
+        chunks = [urls[i:i + max_group_size] for i in range(0, len(urls), max_group_size)]
+        all_message_ids = []
+
+        _LOGGER.debug("Sending %d media items in %d chunk(s) of max %d items (delay: %dms)",
+                      len(urls), len(chunks), max_group_size, chunk_delay)
+
+        for chunk_idx, chunk in enumerate(chunks):
+            # Add delay before sending subsequent chunks
+            if chunk_idx > 0 and chunk_delay > 0:
+                delay_seconds = chunk_delay / 1000
+                _LOGGER.debug("Waiting %dms (%ss) before sending chunk %d/%d",
+                             chunk_delay, delay_seconds, chunk_idx + 1, len(chunks))
+                await asyncio.sleep(delay_seconds)
+
+            # Optimize: Use single-item APIs for chunks with 1 item
+            if len(chunk) == 1:
+                item = chunk[0]
+                media_type = item.get("type", "photo")
+                url = item.get("url")
+
+                # Only apply caption and reply_to to the first chunk
+                chunk_caption = caption if chunk_idx == 0 else None
+                chunk_reply_to = reply_to_message_id if chunk_idx == 0 else None
+
+                if media_type == "photo":
+                    _LOGGER.debug("Sending chunk %d/%d as single photo", chunk_idx + 1, len(chunks))
+                    result = await self._send_telegram_photo(
+                        session, token, chat_id, url, chunk_caption, chunk_reply_to
+                    )
+                else:  # video
+                    _LOGGER.debug("Sending chunk %d/%d as single video", chunk_idx + 1, len(chunks))
+                    result = await self._send_telegram_video(
+                        session, token, chat_id, url, chunk_caption, chunk_reply_to
+                    )
+
+                if not result.get("success"):
+                    result["failed_at_chunk"] = chunk_idx + 1
+                    return result
+
+                all_message_ids.append(result.get("message_id"))
+                continue
+            # Multi-item chunk: use sendMediaGroup
+            _LOGGER.debug("Sending chunk %d/%d as media group (%d items)", chunk_idx + 1, len(chunks), len(chunk))
+
+            # Download all media files for this chunk
+            media_files: list[tuple[str, bytes, str]] = []
+            for i, item in enumerate(chunk):
+                url = item.get("url")
+                media_type = item.get("type", "photo")
+
+                if not url:
+                    return {
+                        "success": False,
+                        "error": f"Missing 'url' in item {chunk_idx * max_group_size + i}",
+                    }
+
+                if media_type not in ("photo", "video"):
+                    return {
+                        "success": False,
+                        "error": f"Invalid type '{media_type}' in item {chunk_idx * max_group_size + i}. Must be 'photo' or 'video'.",
+                    }
+
+                try:
+                    _LOGGER.debug("Downloading media %d from %s", chunk_idx * max_group_size + i, url[:80])
+                    async with session.get(url) as resp:
+                        if resp.status != 200:
+                            return {
+                                "success": False,
+                                "error": f"Failed to download media {chunk_idx * max_group_size + i}: HTTP {resp.status}",
+                            }
+                        data = await resp.read()
+                        ext = "jpg" if media_type == "photo" else "mp4"
+                        filename = f"media_{chunk_idx * max_group_size + i}.{ext}"
+                        media_files.append((media_type, data, filename))
+                        _LOGGER.debug("Downloaded media %d: %d bytes", chunk_idx * max_group_size + i, len(data))
+                except aiohttp.ClientError as err:
+                    return {
+                        "success": False,
+                        "error": f"Failed to download media {chunk_idx * max_group_size + i}: {err}",
+                    }
+
+            # Build multipart form
+            form = FormData()
+            form.add_field("chat_id", chat_id)
+
+            # Only use reply_to_message_id for the first chunk
+            if chunk_idx == 0 and reply_to_message_id:
+                form.add_field("reply_to_message_id", str(reply_to_message_id))
+
+            # Build media JSON with attach:// references
+            media_json = []
+            for i, (media_type, data, filename) in enumerate(media_files):
+                attach_name = f"file{i}"
+                media_item: dict[str, Any] = {
+                    "type": media_type,
+                    "media": f"attach://{attach_name}",
+                }
+                # Only add caption to the first item of the first chunk
+                if chunk_idx == 0 and i == 0 and caption:
+                    media_item["caption"] = caption
+                media_json.append(media_item)
+
+                content_type = "image/jpeg" if media_type == "photo" else "video/mp4"
+                form.add_field(attach_name, data, filename=filename, content_type=content_type)
+
+            form.add_field("media", json.dumps(media_json))
+
+            # Send to Telegram
+            telegram_url = f"https://api.telegram.org/bot{token}/sendMediaGroup"
+
+            try:
+                _LOGGER.debug("Uploading media group chunk %d/%d (%d files) to Telegram",
+                             chunk_idx + 1, len(chunks), len(media_files))
+                async with session.post(telegram_url, data=form) as response:
+                    result = await response.json()
+                    _LOGGER.debug("Telegram API response: status=%d, ok=%s", response.status, result.get("ok"))
+                    if response.status == 200 and result.get("ok"):
+                        chunk_message_ids = [
+                            msg.get("message_id") for msg in result.get("result", [])
+                        ]
+                        all_message_ids.extend(chunk_message_ids)
+                    else:
+                        _LOGGER.error("Telegram API error for chunk %d: %s", chunk_idx + 1, result)
+                        return {
+                            "success": False,
+                            "error": result.get("description", "Unknown Telegram error"),
+                            "error_code": result.get("error_code"),
+                            "failed_at_chunk": chunk_idx + 1,
+                        }
+            except aiohttp.ClientError as err:
+                _LOGGER.error("Telegram upload failed for chunk %d: %s", chunk_idx + 1, err)
+                return {
+                    "success": False,
+                    "error": str(err),
+                    "failed_at_chunk": chunk_idx + 1,
+                }
+
+        return {
+            "success": True,
+            "message_ids": all_message_ids,
+            "chunks_sent": len(chunks),
+        }
 
 
 class ImmichAlbumIdSensor(ImmichAlbumBaseSensor):

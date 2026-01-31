@@ -70,4 +70,4 @@ PLATFORMS: Final = ["sensor", "binary_sensor", "camera", "text", "button"]
 # Services
 SERVICE_REFRESH: Final = "refresh"
 SERVICE_GET_RECENT_ASSETS: Final = "get_recent_assets"
-SERVICE_SEND_TELEGRAM_MEDIA_GROUP: Final = "send_telegram_media_group"
+SERVICE_SEND_TELEGRAM_NOTIFICATION: Final = "send_telegram_notification"

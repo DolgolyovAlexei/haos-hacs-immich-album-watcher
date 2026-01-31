@@ -32,7 +32,7 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
 - **Services** - Custom service calls:
   - `immich_album_watcher.refresh` - Force immediate data refresh
   - `immich_album_watcher.get_recent_assets` - Get recent assets from an album
-  - `immich_album_watcher.send_telegram_media_group` - Send media to Telegram chats
+  - `immich_album_watcher.send_telegram_notification` - Send text, photo, video, or media group to Telegram
 - **Share Link Management** - Button entities to create and delete share links:
   - Create/delete public (unprotected) share links
   - Create/delete password-protected share links
@@ -115,12 +115,49 @@ data:
   count: 10
 ```
 
-### Send Telegram Media Group
+### Send Telegram Notification
 
-Send media URLs to a Telegram chat as a media group (up to 10 items). Useful for forwarding album photos/videos to Telegram. The service downloads media from Immich and uploads it to Telegram, bypassing any CORS restrictions.
+Send notifications to Telegram. Supports multiple formats:
+
+- **Text message** - When `urls` is empty or not provided
+- **Single photo** - When `urls` contains one photo
+- **Single video** - When `urls` contains one video
+- **Media group** - When `urls` contains multiple items
+
+The service downloads media from Immich and uploads it to Telegram, bypassing any CORS restrictions. Large lists of media are automatically split into multiple media groups based on the `max_group_size` parameter (default: 10 items per group).
+
+**Examples:**
+
+Text message:
 
 ```yaml
-service: immich_album_watcher.send_telegram_media_group
+service: immich_album_watcher.send_telegram_notification
+target:
+  entity_id: sensor.album_name_asset_count
+data:
+  chat_id: "-1001234567890"
+  caption: "Check out the new album!"
+  disable_web_page_preview: true
+```
+
+Single photo:
+
+```yaml
+service: immich_album_watcher.send_telegram_notification
+target:
+  entity_id: sensor.album_name_asset_count
+data:
+  chat_id: "-1001234567890"
+  urls:
+    - url: "https://immich.example.com/api/assets/xxx/thumbnail?key=yyy"
+      type: photo
+  caption: "Beautiful sunset!"
+```
+
+Media group:
+
+```yaml
+service: immich_album_watcher.send_telegram_notification
 target:
   entity_id: sensor.album_name_asset_count
 data:
@@ -131,18 +168,21 @@ data:
     - url: "https://immich.example.com/api/assets/zzz/video/playback?key=yyy"
       type: video
   caption: "New photos from the album!"
-  reply_to_message_id: 123  # optional
+  reply_to_message_id: 123
 ```
 
 | Field | Description | Required |
 |-------|-------------|----------|
 | `chat_id` | Telegram chat ID to send to | Yes |
-| `urls` | List of media items with `url` and `type` (photo/video) | Yes |
+| `urls` | List of media items with `url` and `type` (photo/video). Empty for text message. | No |
 | `bot_token` | Telegram bot token (uses configured token if not provided) | No |
-| `caption` | Caption for the media group (applied to first item) | No |
+| `caption` | For media: caption applied to first item. For text: the message text. | No |
 | `reply_to_message_id` | Message ID to reply to | No |
+| `disable_web_page_preview` | Disable link previews in text messages | No |
+| `max_group_size` | Maximum media items per group (2-10). Large lists split into multiple groups. Default: 10 | No |
+| `chunk_delay` | Delay in milliseconds between sending multiple groups (0-60000). Useful for rate limiting. Default: 0 | No |
 
-The service returns a response with `success` status and `message_ids` of sent messages.
+The service returns a response with `success` status and `message_id` (single message), `message_ids` (media group), or `groups_sent` (number of groups when split).
 
 ## Events
 
