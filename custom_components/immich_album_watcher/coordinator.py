@@ -120,6 +120,7 @@ class AssetInfo:
     people: list[str] = field(default_factory=list)
     is_favorite: bool = False
     rating: int | None = None
+    is_processed: bool = True  # Whether asset is fully processed by Immich
 
     @classmethod
     def from_api_response(
@@ -135,19 +136,24 @@ class AssetInfo:
         if users_cache and owner_id:
             owner_name = users_cache.get(owner_id, "")
 
-        # Get description from exifInfo if available
-        description = ""
+        # Get description - prioritize user-added description over EXIF description
+        description = data.get("description", "") or ""
         exif_info = data.get("exifInfo")
-        if exif_info:
+        if not description and exif_info:
+            # Fall back to EXIF description if no user description
             description = exif_info.get("description", "") or ""
 
         # Get favorites and rating
         is_favorite = data.get("isFavorite", False)
-        rating = data.get("exifInfo", {}).get("rating") if exif_info else None
+        rating = exif_info.get("rating") if exif_info else None
+
+        # Check if asset is fully processed by Immich
+        asset_type = data.get("type", ASSET_TYPE_IMAGE)
+        is_processed = cls._check_processing_status(data, asset_type)
 
         return cls(
             id=data["id"],
-            type=data.get("type", ASSET_TYPE_IMAGE),
+            type=asset_type,
             filename=data.get("originalFileName", ""),
             created_at=data.get("fileCreatedAt", ""),
             owner_id=owner_id,
@@ -156,7 +162,47 @@ class AssetInfo:
             people=people,
             is_favorite=is_favorite,
             rating=rating,
+            is_processed=is_processed,
         )
+
+    @staticmethod
+    def _check_processing_status(data: dict[str, Any], asset_type: str) -> bool:
+        """Check if asset has been fully processed by Immich.
+
+        For photos: Check if thumbnails/previews have been generated
+        For videos: Check if video transcoding is complete
+
+        Args:
+            data: Asset data from API response
+            asset_type: Asset type (IMAGE or VIDEO)
+
+        Returns:
+            True if asset is fully processed, False otherwise
+        """
+        if asset_type == ASSET_TYPE_VIDEO:
+            # For videos, check if transcoding is complete
+            # Video is processed if it has an encoded video path or if isOffline is False
+            is_offline = data.get("isOffline", False)
+            if is_offline:
+                return False
+
+            # Check if video has been transcoded (has encoded video path)
+            # Immich uses "encodedVideoPath" or similar field when transcoding is done
+            has_encoded_video = bool(data.get("encodedVideoPath"))
+            return has_encoded_video
+
+        else:  # ASSET_TYPE_IMAGE
+            # For photos, check if thumbnails have been generated
+            # Photos are processed if they have thumbnail/preview paths
+            is_offline = data.get("isOffline", False)
+            if is_offline:
+                return False
+
+            # Check if thumbnails exist
+            has_thumbhash = bool(data.get("thumbhash"))
+            has_thumbnail = has_thumbhash  # If thumbhash exists, thumbnails should exist
+
+            return has_thumbnail
 
 
 @dataclass
@@ -335,8 +381,8 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
         if self.data is None:
             return []
 
-        # Start with all assets
-        assets = list(self.data.assets.values())
+        # Start with all processed assets only
+        assets = [a for a in self.data.assets.values() if a.is_processed]
 
         # Apply filtering
         if filter == "favorite":
@@ -532,13 +578,13 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
         return None
 
     def _get_asset_photo_url(self, asset_id: str) -> str | None:
-        """Get the transcoded/preview URL for a photo asset."""
+        """Get the preview-sized thumbnail URL for a photo asset."""
         accessible_links = self._get_accessible_links()
         if accessible_links:
-            return f"{self._url}/api/assets/{asset_id}/original?key={accessible_links[0].key}"
+            return f"{self._url}/api/assets/{asset_id}/thumbnail?size=preview&key={accessible_links[0].key}"
         non_expired = [link for link in self._shared_links if not link.is_expired]
         if non_expired:
-            return f"{self._url}/api/assets/{asset_id}/original?key={non_expired[0].key}"
+            return f"{self._url}/api/assets/{asset_id}/thumbnail?size=preview&key={non_expired[0].key}"
         return None
 
     def _build_asset_detail(
@@ -712,34 +758,37 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
         added_ids = new_state.asset_ids - old_state.asset_ids
         removed_ids = old_state.asset_ids - new_state.asset_ids
 
+        # Only include fully processed assets in added_assets
+        added_assets = [
+            new_state.assets[aid]
+            for aid in added_ids
+            if aid in new_state.assets and new_state.assets[aid].is_processed
+        ]
+
         # Detect metadata changes
         name_changed = old_state.name != new_state.name
         sharing_changed = old_state.shared != new_state.shared
 
         # Return None only if nothing changed at all
-        if not added_ids and not removed_ids and not name_changed and not sharing_changed:
+        if not added_assets and not removed_ids and not name_changed and not sharing_changed:
             return None
 
-        # Determine primary change type
+        # Determine primary change type (use added_assets not added_ids)
         change_type = "changed"
-        if name_changed and not added_ids and not removed_ids and not sharing_changed:
+        if name_changed and not added_assets and not removed_ids and not sharing_changed:
             change_type = "album_renamed"
-        elif sharing_changed and not added_ids and not removed_ids and not name_changed:
+        elif sharing_changed and not added_assets and not removed_ids and not name_changed:
             change_type = "album_sharing_changed"
-        elif added_ids and not removed_ids and not name_changed and not sharing_changed:
+        elif added_assets and not removed_ids and not name_changed and not sharing_changed:
             change_type = "assets_added"
-        elif removed_ids and not added_ids and not name_changed and not sharing_changed:
+        elif removed_ids and not added_assets and not name_changed and not sharing_changed:
             change_type = "assets_removed"
-
-        added_assets = [
-            new_state.assets[aid] for aid in added_ids if aid in new_state.assets
-        ]
 
         return AlbumChange(
             album_id=new_state.id,
             album_name=new_state.name,
             change_type=change_type,
-            added_count=len(added_ids),
+            added_count=len(added_assets),  # Count only processed assets
             removed_count=len(removed_ids),
             added_assets=added_assets,
             removed_asset_ids=list(removed_ids),
@@ -753,6 +802,9 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
         """Fire Home Assistant events for album changes."""
         added_assets_detail = []
         for asset in change.added_assets:
+            # Only include fully processed assets
+            if not asset.is_processed:
+                continue
             asset_detail = self._build_asset_detail(asset, include_thumbnail=False)
             added_assets_detail.append(asset_detail)
 

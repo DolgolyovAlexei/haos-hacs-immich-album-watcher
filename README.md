@@ -105,7 +105,7 @@ service: immich_album_watcher.refresh
 
 ### Get Assets
 
-Get assets from a specific album with optional filtering and ordering (returns response data):
+Get assets from a specific album with optional filtering and ordering (returns response data). Only returns fully processed assets (videos with completed transcoding, photos with generated thumbnails).
 
 ```yaml
 service: immich_album_watcher.get_assets
@@ -224,7 +224,7 @@ data:
   chat_id: "-1001234567890"
   caption: |
     <b>Album Updated!</b>
-    New photos by <i>{{ trigger.event.data.added_assets[0].asset_owner }}</i>
+    New photos by <i>{{ trigger.event.data.added_assets[0].owner }}</i>
     <a href="https://immich.example.com/album">View Album</a>
   parse_mode: "HTML"  # Default, can be omitted
 ```
@@ -257,7 +257,7 @@ data:
 | `chunk_delay` | Delay in milliseconds between sending multiple groups (0-60000). Useful for rate limiting. Default: 0 | No |
 | `wait_for_response` | Wait for Telegram to finish processing. Set to `false` for fire-and-forget (automation continues immediately). Default: `true` | No |
 | `max_asset_data_size` | Maximum asset size in bytes. Assets exceeding this limit will be skipped. Default: no limit | No |
-| `send_large_photos_as_documents` | Handle photos exceeding Telegram limits (10MB or 10000px dimension sum). If `true`, send as documents. If `false`, downsize to fit. Default: `false` | No |
+| `send_large_photos_as_documents` | Handle photos exceeding Telegram limits (10MB or 10000px dimension sum). If `true`, send as documents. If `false`, skip oversized photos. Default: `false` | No |
 
 The service returns a response with `success` status and `message_id` (single message), `message_ids` (media group), or `groups_sent` (number of groups when split). When `wait_for_response` is `false`, the service returns immediately with `{"success": true, "status": "queued"}` while processing continues in the background.
 
@@ -338,16 +338,21 @@ Each item in the `added_assets` list contains the following fields:
 | Field | Description |
 |-------|-------------|
 | `id` | Unique asset ID |
-| `asset_type` | Type of asset (`IMAGE` or `VIDEO`) |
-| `asset_filename` | Original filename of the asset |
-| `asset_created` | Date/time when the asset was originally created |
-| `asset_owner` | Display name of the user who owns the asset |
-| `asset_owner_id` | Unique ID of the user who owns the asset |
-| `asset_description` | Description/caption of the asset (from EXIF data) |
-| `asset_is_favorite` | Whether the asset is marked as favorite (`true` or `false`) |
-| `asset_rating` | User rating of the asset (1-5 stars, or `null` if not rated) |
-| `asset_url` | Public URL to view the asset (only present if album has a shared link) |
+| `type` | Type of asset (`IMAGE` or `VIDEO`) |
+| `filename` | Original filename of the asset |
+| `created_at` | Date/time when the asset was originally created |
+| `owner` | Display name of the user who owns the asset |
+| `owner_id` | Unique ID of the user who owns the asset |
+| `description` | Description/caption of the asset (from EXIF data) |
+| `is_favorite` | Whether the asset is marked as favorite (`true` or `false`) |
+| `rating` | User rating of the asset (1-5 stars, or `null` if not rated) |
+| `url` | Public URL to view the asset (only present if album has a shared link) |
+| `download_url` | Direct download URL for the original file (if shared link exists) |
+| `playback_url` | Video playback URL (for VIDEO assets only, if shared link exists) |
+| `photo_url` | Photo preview URL (for IMAGE assets only, if shared link exists) |
 | `people` | List of people detected in this specific asset |
+
+> **Note:** Assets are only included in events and service responses when they are fully processed by Immich. For videos, this means transcoding must be complete (with `encodedVideoPath`). For photos, thumbnail generation must be complete (with `thumbhash`). This ensures that all media URLs are valid and accessible. Unprocessed assets are silently ignored until their processing completes.
 
 Example accessing asset owner in an automation:
 
@@ -362,7 +367,7 @@ automation:
         data:
           title: "New Photos"
           message: >
-            {{ trigger.event.data.added_assets[0].asset_owner }} added
+            {{ trigger.event.data.added_assets[0].owner }} added
             {{ trigger.event.data.added_count }} photos to {{ trigger.event.data.album_name }}
 ```
 
