@@ -1,6 +1,9 @@
 {
     "entity": {
         "sensor": {
+            "album_id": {
+                "name": "{album_name}: Album ID"
+            },
             "album_asset_count": {
                 "name": "{album_name}: Asset Count"
             },
@@ -115,10 +118,12 @@
                 "title": "Immich Album Watcher Options",
                 "description": "Configure the polling interval for all albums.",
                 "data": {
-                    "scan_interval": "Scan interval (seconds)"
+                    "scan_interval": "Scan interval (seconds)",
+                    "telegram_bot_token": "Telegram Bot Token"
                 },
                 "data_description": {
-                    "scan_interval": "How often to check for album changes (10-3600 seconds)"
+                    "scan_interval": "How often to check for album changes (10-3600 seconds)",
+                    "telegram_bot_token": "Bot token for sending media groups to Telegram"
                 }
             }
         }
@@ -135,6 +140,32 @@
                 "count": {
                     "name": "Count",
                     "description": "Number of recent assets to return (1-100)."
+                }
+            }
+        },
+        "send_telegram_media_group": {
+            "name": "Send Telegram Media Group",
+            "description": "Send media URLs to Telegram as a media group.",
+            "fields": {
+                "bot_token": {
+                    "name": "Bot Token",
+                    "description": "Telegram bot token (optional if configured in integration options)."
+                },
+                "chat_id": {
+                    "name": "Chat ID",
+                    "description": "Telegram chat ID to send to."
+                },
+                "urls": {
+                    "name": "URLs",
+                    "description": "List of media URLs with type (photo/video)."
+                },
+                "caption": {
+                    "name": "Caption",
+                    "description": "Optional caption for the first media item."
+                },
+                "reply_to_message_id": {
+                    "name": "Reply To",
+                    "description": "Optional message ID to reply to."
                 }
             }
         }

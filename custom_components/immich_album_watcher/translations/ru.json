@@ -1,6 +1,9 @@
 {
     "entity": {
         "sensor": {
+            "album_id": {
+                "name": "{album_name}: ID альбома"
+            },
             "album_asset_count": {
                 "name": "{album_name}: Число файлов"
             },
@@ -115,10 +118,12 @@
                 "title": "Настройки Immich Album Watcher",
                 "description": "Настройте интервал опроса для всех альбомов.",
                 "data": {
-                    "scan_interval": "Интервал сканирования (секунды)"
+                    "scan_interval": "Интервал сканирования (секунды)",
+                    "telegram_bot_token": "Токен Telegram бота"
                 },
                 "data_description": {
-                    "scan_interval": "Как часто проверять изменения в альбомах (10-3600 секунд)"
+                    "scan_interval": "Как часто проверять изменения в альбомах (10-3600 секунд)",
+                    "telegram_bot_token": "Токен бота для отправки медиа-групп в Telegram"
                 }
             }
         }
@@ -135,6 +140,32 @@
                 "count": {
                     "name": "Количество",
                     "description": "Количество возвращаемых файлов (1-100)."
+                }
+            }
+        },
+        "send_telegram_media_group": {
+            "name": "Отправить медиа-группу в Telegram",
+            "description": "Отправить медиа-файлы в Telegram как группу.",
+            "fields": {
+                "bot_token": {
+                    "name": "Токен бота",
+                    "description": "Токен Telegram бота (необязательно, если настроен в опциях интеграции)."
+                },
+                "chat_id": {
+                    "name": "ID чата",
+                    "description": "ID чата Telegram для отправки."
+                },
+                "urls": {
+                    "name": "URL-адреса",
+                    "description": "Список URL медиа-файлов с типом (photo/video)."
+                },
+                "caption": {
+                    "name": "Подпись",
+                    "description": "Необязательная подпись для первого медиа-файла."
+                },
+                "reply_to_message_id": {
+                    "name": "Ответ на",
+                    "description": "ID сообщения для ответа (необязательно)."
                 }
             }
         }
