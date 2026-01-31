@@ -32,6 +32,7 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
 - **Services** - Custom service calls:
   - `immich_album_watcher.refresh` - Force immediate data refresh
   - `immich_album_watcher.get_recent_assets` - Get recent assets from an album
+  - `immich_album_watcher.send_telegram_media_group` - Send media to Telegram chats
 - **Share Link Management** - Button entities to create and delete share links:
   - Create/delete public (unprotected) share links
   - Create/delete password-protected share links
@@ -69,6 +70,7 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
 | API Key | Your Immich API key | Required |
 | Albums | Albums to monitor | Required |
 | Scan Interval | How often to check for changes (seconds) | 60 |
+| Telegram Bot Token | Bot token for sending media to Telegram (optional) | - |
 
 ## Entities Created (per album)
 
@@ -107,10 +109,40 @@ Get the most recent assets from a specific album (returns response data):
 
 ```yaml
 service: immich_album_watcher.get_recent_assets
+target:
+  entity_id: sensor.album_name_asset_count
 data:
-  album_id: "your-album-id-here"
   count: 10
 ```
+
+### Send Telegram Media Group
+
+Send media URLs to a Telegram chat as a media group (up to 10 items). Useful for forwarding album photos/videos to Telegram. The service downloads media from Immich and uploads it to Telegram, bypassing any CORS restrictions.
+
+```yaml
+service: immich_album_watcher.send_telegram_media_group
+target:
+  entity_id: sensor.album_name_asset_count
+data:
+  chat_id: "-1001234567890"
+  urls:
+    - url: "https://immich.example.com/api/assets/xxx/thumbnail?key=yyy"
+      type: photo
+    - url: "https://immich.example.com/api/assets/zzz/video/playback?key=yyy"
+      type: video
+  caption: "New photos from the album!"
+  reply_to_message_id: 123  # optional
+```
+
+| Field | Description | Required |
+|-------|-------------|----------|
+| `chat_id` | Telegram chat ID to send to | Yes |
+| `urls` | List of media items with `url` and `type` (photo/video) | Yes |
+| `bot_token` | Telegram bot token (uses configured token if not provided) | No |
+| `caption` | Caption for the media group (applied to first item) | No |
+| `reply_to_message_id` | Message ID to reply to | No |
+
+The service returns a response with `success` status and `message_ids` of sent messages.
 
 ## Events
 
