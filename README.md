@@ -10,12 +10,15 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
 
 - **Album Monitoring** - Watch selected Immich albums for asset additions and removals
 - **Rich Sensor Data** - Multiple sensors per album:
-  - Album ID (with share URL attribute)
-  - Asset count (with detected people list)
-  - Photo count
-  - Video count
-  - Last updated timestamp
-  - Creation date
+  - Album ID (with album name and share URL attributes)
+  - Asset Count (total assets with detected people list)
+  - Photo Count (number of photos)
+  - Video Count (number of videos)
+  - Last Updated (last modification timestamp)
+  - Created (album creation date)
+  - Public URL (public share link)
+  - Protected URL (password-protected share link)
+  - Protected Password (password for protected link)
 - **Camera Entity** - Album thumbnail displayed as a camera entity for dashboards
 - **Binary Sensor** - "New Assets" indicator that turns on when assets are added
 - **Face Recognition** - Detects and lists people recognized in album photos
@@ -40,6 +43,9 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
   - Create/delete password-protected share links
   - Edit protected link passwords via Text entity
 - **Configurable Polling** - Adjustable scan interval (10-3600 seconds)
+- **Localization** - Available in multiple languages:
+  - English
+  - Russian (Русский)
 
 ## Installation
 
@@ -110,26 +116,37 @@ Get assets from a specific album with optional filtering and ordering (returns r
 ```yaml
 service: immich_album_watcher.get_assets
 target:
-  entity_id: sensor.album_name_asset_count
+  entity_id: sensor.album_name_asset_limit
 data:
-  count: 10                    # Maximum number of assets (1-100)
-  filter: "favorite"           # Options: "none", "favorite", "rating"
-  filter_min_rating: 4         # Min rating (1-5), used when filter="rating"
+  limit: 10                    # Maximum number of assets (1-100)
+  favorite_only: false         # true = favorites only, false = all assets
+  filter_min_rating: 4         # Min rating (1-5)
+  order_by: "date"             # Options: "date", "rating", "name"
   order: "descending"          # Options: "ascending", "descending", "random"
+  asset_type: "all"            # Options: "all", "photo", "video"
+  min_date: "2024-01-01"       # Optional: assets created on or after this date
+  max_date: "2024-12-31"       # Optional: assets created on or before this date
 ```
 
 **Parameters:**
 
-- `count` (optional, default: 10): Maximum number of assets to return (1-100)
-- `filter` (optional, default: "none"): Filter type
-  - `"none"`: No filtering, return all assets
-  - `"favorite"`: Return only favorite assets
-  - `"rating"`: Return assets with rating >= `filter_min_rating`
-- `filter_min_rating` (optional, default: 1): Minimum rating (1-5 stars), used when `filter="rating"`
-- `order` (optional, default: "descending"): Sort order by creation date
-  - `"ascending"`: Oldest first
-  - `"descending"`: Newest first
-  - `"random"`: Random order
+- `limit` (optional, default: 10): Maximum number of assets to return (1-100)
+- `favorite_only` (optional, default: false): Filter to show only favorite assets
+- `filter_min_rating` (optional, default: 1): Minimum rating for assets (1-5 stars). Applied independently of `favorite_only`
+- `order_by` (optional, default: "date"): Field to sort assets by
+  - `"date"`: Sort by creation date
+  - `"rating"`: Sort by rating (assets without rating are placed last)
+  - `"name"`: Sort by filename
+- `order` (optional, default: "descending"): Sort direction
+  - `"ascending"`: Ascending order
+  - `"descending"`: Descending order
+  - `"random"`: Random order (ignores `order_by`)
+- `asset_type` (optional, default: "all"): Filter by asset type
+  - `"all"`: No type filtering, return both photos and videos
+  - `"photo"`: Return only photos
+  - `"video"`: Return only videos
+- `min_date` (optional): Filter assets created on or after this date. Use ISO 8601 format (e.g., `"2024-01-01"` or `"2024-01-01T10:30:00"`)
+- `max_date` (optional): Filter assets created on or before this date. Use ISO 8601 format (e.g., `"2024-12-31"` or `"2024-12-31T23:59:59"`)
 
 **Examples:**
 
@@ -138,10 +155,11 @@ Get 5 most recent favorite assets:
 ```yaml
 service: immich_album_watcher.get_assets
 target:
-  entity_id: sensor.album_name_asset_count
+  entity_id: sensor.album_name_asset_limit
 data:
-  count: 5
-  filter: "favorite"
+  limit: 5
+  favorite_only: true
+  order_by: "date"
   order: "descending"
 ```
 
@@ -150,12 +168,66 @@ Get 10 random assets rated 3 stars or higher:
 ```yaml
 service: immich_album_watcher.get_assets
 target:
-  entity_id: sensor.album_name_asset_count
+  entity_id: sensor.album_name_asset_limit
 data:
-  count: 10
-  filter: "rating"
+  limit: 10
   filter_min_rating: 3
   order: "random"
+```
+
+Get 20 most recent photos only:
+
+```yaml
+service: immich_album_watcher.get_assets
+target:
+  entity_id: sensor.album_name_asset_limit
+data:
+  limit: 20
+  asset_type: "photo"
+  order_by: "date"
+  order: "descending"
+```
+
+Get top 10 highest rated favorite videos:
+
+```yaml
+service: immich_album_watcher.get_assets
+target:
+  entity_id: sensor.album_name_asset_limit
+data:
+  limit: 10
+  favorite_only: true
+  asset_type: "video"
+  order_by: "rating"
+  order: "descending"
+```
+
+Get photos sorted alphabetically by name:
+
+```yaml
+service: immich_album_watcher.get_assets
+target:
+  entity_id: sensor.album_name_asset_limit
+data:
+  limit: 20
+  asset_type: "photo"
+  order_by: "name"
+  order: "ascending"
+```
+
+Get photos from a specific date range:
+
+```yaml
+service: immich_album_watcher.get_assets
+target:
+  entity_id: sensor.album_name_asset_limit
+data:
+  limit: 50
+  asset_type: "photo"
+  min_date: "2024-06-01"
+  max_date: "2024-06-30"
+  order_by: "date"
+  order: "descending"
 ```
 
 ### Send Telegram Notification
@@ -176,7 +248,7 @@ Text message:
 ```yaml
 service: immich_album_watcher.send_telegram_notification
 target:
-  entity_id: sensor.album_name_asset_count
+  entity_id: sensor.album_name_asset_limit
 data:
   chat_id: "-1001234567890"
   caption: "Check out the new album!"
@@ -188,7 +260,7 @@ Single photo:
 ```yaml
 service: immich_album_watcher.send_telegram_notification
 target:
-  entity_id: sensor.album_name_asset_count
+  entity_id: sensor.album_name_asset_limit
 data:
   chat_id: "-1001234567890"
   urls:
@@ -202,7 +274,7 @@ Media group:
 ```yaml
 service: immich_album_watcher.send_telegram_notification
 target:
-  entity_id: sensor.album_name_asset_count
+  entity_id: sensor.album_name_asset_limit
 data:
   chat_id: "-1001234567890"
   urls:
@@ -219,7 +291,7 @@ HTML formatting:
 ```yaml
 service: immich_album_watcher.send_telegram_notification
 target:
-  entity_id: sensor.album_name_asset_count
+  entity_id: sensor.album_name_asset_limit
 data:
   chat_id: "-1001234567890"
   caption: |
@@ -234,7 +306,7 @@ Non-blocking mode (fire-and-forget):
 ```yaml
 service: immich_album_watcher.send_telegram_notification
 target:
-  entity_id: sensor.album_name_asset_count
+  entity_id: sensor.album_name_asset_limit
 data:
   chat_id: "-1001234567890"
   urls:
@@ -288,7 +360,7 @@ automation:
       - service: notify.mobile_app
         data:
           title: "New Photos"
-          message: "{{ trigger.event.data.added_count }} new photos in {{ trigger.event.data.album_name }}"
+          message: "{{ trigger.event.data.added_limit }} new photos in {{ trigger.event.data.album_name }}"
 
   - alias: "Album renamed"
     trigger:
@@ -321,8 +393,8 @@ automation:
 | `album_url` | Public URL to view the album (only present if album has a shared link) | All events except `album_deleted` |
 | `change_type` | Type of change (assets_added, assets_removed, album_renamed, album_sharing_changed, changed) | All events except `album_deleted` |
 | `shared` | Current sharing status of the album | All events except `album_deleted` |
-| `added_count` | Number of assets added | `album_changed`, `assets_added` |
-| `removed_count` | Number of assets removed | `album_changed`, `assets_removed` |
+| `added_limit` | Number of assets added | `album_changed`, `assets_added` |
+| `removed_limit` | Number of assets removed | `album_changed`, `assets_removed` |
 | `added_assets` | List of added assets with details (see below) | `album_changed`, `assets_added` |
 | `removed_assets` | List of removed asset IDs | `album_changed`, `assets_removed` |
 | `people` | List of all people detected in the album | All events except `album_deleted` |
@@ -368,7 +440,7 @@ automation:
           title: "New Photos"
           message: >
             {{ trigger.event.data.added_assets[0].owner }} added
-            {{ trigger.event.data.added_count }} photos to {{ trigger.event.data.album_name }}
+            {{ trigger.event.data.added_limit }} photos to {{ trigger.event.data.album_name }}
 ```
 
 ## Requirements

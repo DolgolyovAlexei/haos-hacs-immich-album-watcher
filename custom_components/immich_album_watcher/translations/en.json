@@ -137,21 +137,37 @@
             "name": "Get Assets",
             "description": "Get assets from the targeted album with optional filtering and ordering.",
             "fields": {
-                "count": {
-                    "name": "Count",
+                "limit": {
+                    "name": "Limit",
                     "description": "Maximum number of assets to return (1-100)."
                 },
-                "filter": {
-                    "name": "Filter",
-                    "description": "Filter assets by type (none, favorite, or rating-based)."
+                "favorite_only": {
+                    "name": "Favorite Only",
+                    "description": "Filter to show only favorite assets."
                 },
                 "filter_min_rating": {
                     "name": "Minimum Rating",
-                    "description": "Minimum rating for assets (1-5). Only used when filter is set to 'rating'."
+                    "description": "Minimum rating for assets (1-5)."
+                },
+                "order_by": {
+                    "name": "Order By",
+                    "description": "Field to sort assets by (date, rating, or name)."
                 },
                 "order": {
                     "name": "Order",
-                    "description": "Sort order for assets by creation date."
+                    "description": "Sort direction (ascending, descending, or random)."
+                },
+                "asset_type": {
+                    "name": "Asset Type",
+                    "description": "Filter assets by type (all, photo, or video)."
+                },
+                "min_date": {
+                    "name": "Minimum Date",
+                    "description": "Filter assets created on or after this date (ISO 8601 format)."
+                },
+                "max_date": {
+                    "name": "Maximum Date",
+                    "description": "Filter assets created on or before this date (ISO 8601 format)."
                 }
             }
         },

@@ -362,18 +362,26 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
 
     async def async_get_assets(
         self,
-        count: int = 10,
-        filter: str = "none",
+        limit: int = 10,
+        favorite_only: bool = False,
         filter_min_rating: int = 1,
+        order_by: str = "date",
         order: str = "descending",
+        asset_type: str = "all",
+        min_date: str | None = None,
+        max_date: str | None = None,
     ) -> list[dict[str, Any]]:
         """Get assets from the album with optional filtering and ordering.
 
         Args:
-            count: Maximum number of assets to return (1-100)
-            filter: Filter type - 'none', 'favorite', or 'rating'
-            filter_min_rating: Minimum rating for assets (1-5), used when filter='rating'
-            order: Sort order - 'ascending', 'descending', or 'random'
+            limit: Maximum number of assets to return (1-100)
+            favorite_only: Filter to show only favorite assets
+            filter_min_rating: Minimum rating for assets (1-5)
+            order_by: Field to sort by - 'date', 'rating', or 'name'
+            order: Sort direction - 'ascending', 'descending', or 'random'
+            asset_type: Asset type filter - 'all', 'photo', or 'video'
+            min_date: Filter assets created on or after this date (ISO 8601 format)
+            max_date: Filter assets created on or before this date (ISO 8601 format)
 
         Returns:
             List of asset data dictionaries
@@ -384,23 +392,54 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
         # Start with all processed assets only
         assets = [a for a in self.data.assets.values() if a.is_processed]
 
-        # Apply filtering
-        if filter == "favorite":
+        # Apply favorite filter
+        if favorite_only:
             assets = [a for a in assets if a.is_favorite]
-        elif filter == "rating":
+
+        # Apply rating filter
+        if filter_min_rating > 1:
             assets = [a for a in assets if a.rating is not None and a.rating >= filter_min_rating]
+
+        # Apply asset type filtering
+        if asset_type == "photo":
+            assets = [a for a in assets if a.type == ASSET_TYPE_IMAGE]
+        elif asset_type == "video":
+            assets = [a for a in assets if a.type == ASSET_TYPE_VIDEO]
+
+        # Apply date filtering
+        if min_date:
+            assets = [a for a in assets if a.created_at >= min_date]
+        if max_date:
+            assets = [a for a in assets if a.created_at <= max_date]
 
         # Apply ordering
         if order == "random":
             import random
             random.shuffle(assets)
-        elif order == "ascending":
-            assets = sorted(assets, key=lambda a: a.created_at, reverse=False)
-        else:  # descending (default)
-            assets = sorted(assets, key=lambda a: a.created_at, reverse=True)
+        else:
+            # Determine sort key based on order_by
+            if order_by == "rating":
+                # Sort by rating, putting None values last
+                assets = sorted(
+                    assets,
+                    key=lambda a: (a.rating is None, a.rating if a.rating is not None else 0),
+                    reverse=(order == "descending")
+                )
+            elif order_by == "name":
+                assets = sorted(
+                    assets,
+                    key=lambda a: a.filename.lower(),
+                    reverse=(order == "descending")
+                )
+            else:  # date (default)
+                assets = sorted(
+                    assets,
+                    key=lambda a: a.created_at,
+                    reverse=(order == "descending")
+                )
 
-        # Limit count
-        assets = assets[:count]
+        # Limit results
+        assets = assets[:limit]
 
         # Build result with all available asset data (matching event data)
         result = []

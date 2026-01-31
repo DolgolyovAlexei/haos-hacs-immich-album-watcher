@@ -182,17 +182,25 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
 
     async def async_get_assets(
         self,
-        count: int = 10,
-        filter: str = "none",
+        limit: int = 10,
+        favorite_only: bool = False,
         filter_min_rating: int = 1,
+        order_by: str = "date",
         order: str = "descending",
+        asset_type: str = "all",
+        min_date: str | None = None,
+        max_date: str | None = None,
     ) -> ServiceResponse:
         """Get assets for this album with optional filtering and ordering."""
         assets = await self.coordinator.async_get_assets(
-            count=count,
-            filter=filter,
+            limit=limit,
+            favorite_only=favorite_only,
             filter_min_rating=filter_min_rating,
+            order_by=order_by,
             order=order,
+            asset_type=asset_type,
+            min_date=min_date,
+            max_date=max_date,
         )
         return {"assets": assets}
 

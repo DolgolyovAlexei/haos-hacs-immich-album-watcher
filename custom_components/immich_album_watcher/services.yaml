@@ -14,8 +14,8 @@ get_assets:
       integration: immich_album_watcher
       domain: sensor
   fields:
-    count:
-      name: Count
+    limit:
+      name: Limit
       description: Maximum number of assets to return (1-100).
       required: false
       default: 10
@@ -24,23 +24,16 @@ get_assets:
           min: 1
           max: 100
           mode: slider
-    filter:
-      name: Filter
-      description: Filter assets by type (none, favorite, or rating-based).
+    favorite_only:
+      name: Favorite Only
+      description: Filter to show only favorite assets.
       required: false
-      default: "none"
+      default: false
       selector:
-        select:
-          options:
-            - label: "None (no filtering)"
-              value: "none"
-            - label: "Favorites only"
-              value: "favorite"
-            - label: "By minimum rating"
-              value: "rating"
+        boolean:
     filter_min_rating:
       name: Minimum Rating
-      description: Minimum rating for assets (1-5). Only used when filter is set to 'rating'.
+      description: Minimum rating for assets (1-5). Set to filter by rating.
       required: false
       default: 1
       selector:
@@ -48,20 +41,60 @@ get_assets:
           min: 1
           max: 5
           mode: slider
+    order_by:
+      name: Order By
+      description: Field to sort assets by.
+      required: false
+      default: "date"
+      selector:
+        select:
+          options:
+            - label: "Date"
+              value: "date"
+            - label: "Rating"
+              value: "rating"
+            - label: "Name"
+              value: "name"
     order:
       name: Order
-      description: Sort order for assets by creation date.
+      description: Sort direction.
       required: false
       default: "descending"
       selector:
         select:
           options:
-            - label: "Ascending (oldest first)"
+            - label: "Ascending"
               value: "ascending"
-            - label: "Descending (newest first)"
+            - label: "Descending"
               value: "descending"
             - label: "Random"
               value: "random"
+    asset_type:
+      name: Asset Type
+      description: Filter assets by type (all, photo, or video).
+      required: false
+      default: "all"
+      selector:
+        select:
+          options:
+            - label: "All (no type filtering)"
+              value: "all"
+            - label: "Photos only"
+              value: "photo"
+            - label: "Videos only"
+              value: "video"
+    min_date:
+      name: Minimum Date
+      description: Filter assets created on or after this date (ISO 8601 format, e.g., 2024-01-01 or 2024-01-01T10:30:00).
+      required: false
+      selector:
+        text:
+    max_date:
+      name: Maximum Date
+      description: Filter assets created on or before this date (ISO 8601 format, e.g., 2024-12-31 or 2024-12-31T23:59:59).
+      required: false
+      selector:
+        text:
 
 send_telegram_notification:
   name: Send Telegram Notification
