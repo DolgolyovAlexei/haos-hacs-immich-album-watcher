@@ -38,10 +38,18 @@ from .const import (
     ATTR_PEOPLE,
     ATTR_REMOVED_ASSETS,
     ATTR_REMOVED_COUNT,
+    ATTR_OLD_NAME,
+    ATTR_NEW_NAME,
+    ATTR_OLD_SHARED,
+    ATTR_NEW_SHARED,
+    ATTR_SHARED,
     DOMAIN,
     EVENT_ALBUM_CHANGED,
     EVENT_ASSETS_ADDED,
     EVENT_ASSETS_REMOVED,
+    EVENT_ALBUM_RENAMED,
+    EVENT_ALBUM_DELETED,
+    EVENT_ALBUM_SHARING_CHANGED,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -210,6 +218,10 @@ class AlbumChange:
     removed_count: int = 0
     added_assets: list[AssetInfo] = field(default_factory=list)
     removed_asset_ids: list[str] = field(default_factory=list)
+    old_name: str | None = None
+    new_name: str | None = None
+    old_shared: bool | None = None
+    new_shared: bool | None = None
 
 
 class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
@@ -510,6 +522,15 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
             ) as response:
                 if response.status == 404:
                     _LOGGER.warning("Album %s not found", self._album_id)
+                    # Fire album_deleted event if we had previous state (album was deleted)
+                    if self._previous_state:
+                        event_data = {
+                            ATTR_HUB_NAME: self._hub_name,
+                            ATTR_ALBUM_ID: self._album_id,
+                            ATTR_ALBUM_NAME: self._previous_state.name,
+                        }
+                        self.hass.bus.async_fire(EVENT_ALBUM_DELETED, event_data)
+                        _LOGGER.info("Album '%s' was deleted", self._previous_state.name)
                     return None
                 if response.status != 200:
                     raise UpdateFailed(
@@ -599,13 +620,23 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
         added_ids = new_state.asset_ids - old_state.asset_ids
         removed_ids = old_state.asset_ids - new_state.asset_ids
 
-        if not added_ids and not removed_ids:
+        # Detect metadata changes
+        name_changed = old_state.name != new_state.name
+        sharing_changed = old_state.shared != new_state.shared
+
+        # Return None only if nothing changed at all
+        if not added_ids and not removed_ids and not name_changed and not sharing_changed:
             return None
 
+        # Determine primary change type
         change_type = "changed"
-        if added_ids and not removed_ids:
+        if name_changed and not added_ids and not removed_ids and not sharing_changed:
+            change_type = "album_renamed"
+        elif sharing_changed and not added_ids and not removed_ids and not name_changed:
+            change_type = "album_sharing_changed"
+        elif added_ids and not removed_ids and not name_changed and not sharing_changed:
             change_type = "assets_added"
-        elif removed_ids and not added_ids:
+        elif removed_ids and not added_ids and not name_changed and not sharing_changed:
             change_type = "assets_removed"
 
         added_assets = [
@@ -620,6 +651,10 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
             removed_count=len(removed_ids),
             added_assets=added_assets,
             removed_asset_ids=list(removed_ids),
+            old_name=old_state.name if name_changed else None,
+            new_name=new_state.name if name_changed else None,
+            old_shared=old_state.shared if sharing_changed else None,
+            new_shared=new_state.shared if sharing_changed else None,
         )
 
     def _fire_events(self, change: AlbumChange, album: AlbumData) -> None:
@@ -658,7 +693,17 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
             ATTR_ADDED_ASSETS: added_assets_detail,
             ATTR_REMOVED_ASSETS: change.removed_asset_ids,
             ATTR_PEOPLE: list(album.people),
+            ATTR_SHARED: album.shared,
         }
+
+        # Add metadata change attributes if applicable
+        if change.old_name is not None:
+            event_data[ATTR_OLD_NAME] = change.old_name
+            event_data[ATTR_NEW_NAME] = change.new_name
+
+        if change.old_shared is not None:
+            event_data[ATTR_OLD_SHARED] = change.old_shared
+            event_data[ATTR_NEW_SHARED] = change.new_shared
 
         album_url = self.get_any_url()
         if album_url:
@@ -678,6 +723,24 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
 
         if change.removed_count > 0:
             self.hass.bus.async_fire(EVENT_ASSETS_REMOVED, event_data)
+
+        # Fire specific events for metadata changes
+        if change.old_name is not None:
+            self.hass.bus.async_fire(EVENT_ALBUM_RENAMED, event_data)
+            _LOGGER.info(
+                "Album renamed: '%s' -> '%s'",
+                change.old_name,
+                change.new_name,
+            )
+
+        if change.old_shared is not None:
+            self.hass.bus.async_fire(EVENT_ALBUM_SHARING_CHANGED, event_data)
+            _LOGGER.info(
+                "Album '%s' sharing changed: %s -> %s",
+                change.album_name,
+                change.old_shared,
+                change.new_shared,
+            )
 
     def get_protected_link_id(self) -> str | None:
         """Get the ID of the first protected link."""

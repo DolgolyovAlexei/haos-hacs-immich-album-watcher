@@ -71,6 +71,22 @@ send_telegram_notification:
       required: false
       selector:
         boolean:
+    parse_mode:
+      name: Parse Mode
+      description: How to parse the caption/text. Options are "HTML", "Markdown", "MarkdownV2", or empty string for plain text.
+      required: false
+      default: "HTML"
+      selector:
+        select:
+          options:
+            - label: "HTML"
+              value: "HTML"
+            - label: "Markdown"
+              value: "Markdown"
+            - label: "MarkdownV2"
+              value: "MarkdownV2"
+            - label: "Plain Text"
+              value: ""
     max_group_size:
       name: Max Group Size
       description: Maximum number of media items per media group (2-10). Large lists will be split into multiple groups.

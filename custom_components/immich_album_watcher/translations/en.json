@@ -171,6 +171,10 @@
                     "name": "Disable Web Page Preview",
                     "description": "Disable link previews in text messages."
                 },
+                "parse_mode": {
+                    "name": "Parse Mode",
+                    "description": "How to parse the caption/text. Options are HTML, Markdown, MarkdownV2, or empty string for plain text."
+                },
                 "max_group_size": {
                     "name": "Max Group Size",
                     "description": "Maximum number of media items per media group (2-10). Large lists will be split into multiple groups."

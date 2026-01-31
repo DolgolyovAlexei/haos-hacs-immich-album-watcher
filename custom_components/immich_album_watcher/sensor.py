@@ -107,6 +107,7 @@ async def async_setup_entry(
             vol.Optional("caption"): str,
             vol.Optional("reply_to_message_id"): vol.Coerce(int),
             vol.Optional("disable_web_page_preview"): bool,
+            vol.Optional("parse_mode", default="HTML"): str,
             vol.Optional("max_group_size", default=10): vol.All(
                 vol.Coerce(int), vol.Range(min=2, max=10)
             ),
@@ -182,6 +183,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         caption: str | None = None,
         reply_to_message_id: int | None = None,
         disable_web_page_preview: bool | None = None,
+        parse_mode: str = "HTML",
         max_group_size: int = 10,
         chunk_delay: int = 0,
     ) -> ServiceResponse:
@@ -214,24 +216,24 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         # Handle empty URLs - send simple text message
         if not urls:
             return await self._send_telegram_message(
-                session, token, chat_id, caption or "", reply_to_message_id, disable_web_page_preview
+                session, token, chat_id, caption or "", reply_to_message_id, disable_web_page_preview, parse_mode
             )
 
         # Handle single photo
         if len(urls) == 1 and urls[0].get("type", "photo") == "photo":
             return await self._send_telegram_photo(
-                session, token, chat_id, urls[0].get("url"), caption, reply_to_message_id
+                session, token, chat_id, urls[0].get("url"), caption, reply_to_message_id, parse_mode
             )
 
         # Handle single video
         if len(urls) == 1 and urls[0].get("type") == "video":
             return await self._send_telegram_video(
-                session, token, chat_id, urls[0].get("url"), caption, reply_to_message_id
+                session, token, chat_id, urls[0].get("url"), caption, reply_to_message_id, parse_mode
             )
 
         # Handle multiple items - send as media group(s)
         return await self._send_telegram_media_group(
-            session, token, chat_id, urls, caption, reply_to_message_id, max_group_size, chunk_delay
+            session, token, chat_id, urls, caption, reply_to_message_id, max_group_size, chunk_delay, parse_mode
         )
 
     async def _send_telegram_message(
@@ -242,6 +244,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         text: str,
         reply_to_message_id: int | None = None,
         disable_web_page_preview: bool | None = None,
+        parse_mode: str = "HTML",
     ) -> ServiceResponse:
         """Send a simple text message to Telegram."""
         import aiohttp
@@ -251,6 +254,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         payload: dict[str, Any] = {
             "chat_id": chat_id,
             "text": text or "Notification from Home Assistant",
+            "parse_mode": parse_mode,
         }
 
         if reply_to_message_id:
@@ -288,6 +292,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         url: str | None,
         caption: str | None = None,
         reply_to_message_id: int | None = None,
+        parse_mode: str = "HTML",
     ) -> ServiceResponse:
         """Send a single photo to Telegram."""
         import aiohttp
@@ -312,6 +317,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
             form = FormData()
             form.add_field("chat_id", chat_id)
             form.add_field("photo", data, filename="photo.jpg", content_type="image/jpeg")
+            form.add_field("parse_mode", parse_mode)
 
             if caption:
                 form.add_field("caption", caption)
@@ -350,6 +356,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         url: str | None,
         caption: str | None = None,
         reply_to_message_id: int | None = None,
+        parse_mode: str = "HTML",
     ) -> ServiceResponse:
         """Send a single video to Telegram."""
         import aiohttp
@@ -374,6 +381,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
             form = FormData()
             form.add_field("chat_id", chat_id)
             form.add_field("video", data, filename="video.mp4", content_type="video/mp4")
+            form.add_field("parse_mode", parse_mode)
 
             if caption:
                 form.add_field("caption", caption)
@@ -414,6 +422,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         reply_to_message_id: int | None = None,
         max_group_size: int = 10,
         chunk_delay: int = 0,
+        parse_mode: str = "HTML",
     ) -> ServiceResponse:
         """Send media URLs to Telegram as media group(s).
 
@@ -454,12 +463,12 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                 if media_type == "photo":
                     _LOGGER.debug("Sending chunk %d/%d as single photo", chunk_idx + 1, len(chunks))
                     result = await self._send_telegram_photo(
-                        session, token, chat_id, url, chunk_caption, chunk_reply_to
+                        session, token, chat_id, url, chunk_caption, chunk_reply_to, parse_mode
                     )
                 else:  # video
                     _LOGGER.debug("Sending chunk %d/%d as single video", chunk_idx + 1, len(chunks))
                     result = await self._send_telegram_video(
-                        session, token, chat_id, url, chunk_caption, chunk_reply_to
+                        session, token, chat_id, url, chunk_caption, chunk_reply_to, parse_mode
                     )
 
                 if not result.get("success"):
@@ -527,6 +536,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                 # Only add caption to the first item of the first chunk
                 if chunk_idx == 0 and i == 0 and caption:
                     media_item["caption"] = caption
+                    media_item["parse_mode"] = parse_mode
                 media_json.append(media_item)
 
                 content_type = "image/jpeg" if media_type == "photo" else "video/mp4"
