@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Home Assistant Community
+    url: https://community.home-assistant.io/
+    about: Ask questions about Home Assistant
+  - name: Immich Documentation
+    url: https://immich.app/docs
+    about: Immich official documentation
