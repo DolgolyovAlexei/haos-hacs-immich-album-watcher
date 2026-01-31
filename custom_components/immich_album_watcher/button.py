@@ -84,13 +84,6 @@ class ImmichCreateShareLinkButton(
         return self.coordinator.data
 
     @property
-    def translation_placeholders(self) -> dict[str, str]:
-        """Return translation placeholders."""
-        if self._album_data:
-            return {"album_name": self._album_data.name}
-        return {"album_name": self._album_name}
-
-    @property
     def available(self) -> bool:
         """Return if entity is available.
 
@@ -172,13 +165,6 @@ class ImmichDeleteShareLinkButton(
     def _album_data(self) -> AlbumData | None:
         """Get the album data from coordinator."""
         return self.coordinator.data
-
-    @property
-    def translation_placeholders(self) -> dict[str, str]:
-        """Return translation placeholders."""
-        if self._album_data:
-            return {"album_name": self._album_data.name}
-        return {"album_name": self._album_name}
 
     @property
     def available(self) -> bool:
@@ -271,13 +257,6 @@ class ImmichCreateProtectedLinkButton(
         return self.coordinator.data
 
     @property
-    def translation_placeholders(self) -> dict[str, str]:
-        """Return translation placeholders."""
-        if self._album_data:
-            return {"album_name": self._album_data.name}
-        return {"album_name": self._album_name}
-
-    @property
     def available(self) -> bool:
         """Return if entity is available.
 
@@ -363,13 +342,6 @@ class ImmichDeleteProtectedLinkButton(
     def _album_data(self) -> AlbumData | None:
         """Get the album data from coordinator."""
         return self.coordinator.data
-
-    @property
-    def translation_placeholders(self) -> dict[str, str]:
-        """Return translation placeholders."""
-        if self._album_data:
-            return {"album_name": self._album_data.name}
-        return {"album_name": self._album_name}
 
     @property
     def available(self) -> bool:

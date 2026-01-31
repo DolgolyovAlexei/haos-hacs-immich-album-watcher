@@ -2,60 +2,60 @@
     "entity": {
         "sensor": {
             "album_id": {
-                "name": "{album_name}: ID альбома"
+                "name": "ID альбома"
             },
             "album_asset_count": {
-                "name": "{album_name}: Число файлов"
+                "name": "Число файлов"
             },
             "album_photo_count": {
-                "name": "{album_name}: Число фото"
+                "name": "Число фото"
             },
             "album_video_count": {
-                "name": "{album_name}: Число видео"
+                "name": "Число видео"
             },
             "album_last_updated": {
-                "name": "{album_name}: Последнее обновление"
+                "name": "Последнее обновление"
             },
             "album_created": {
-                "name": "{album_name}: Дата создания"
+                "name": "Дата создания"
             },
             "album_public_url": {
-                "name": "{album_name}: Публичная ссылка"
+                "name": "Публичная ссылка"
             },
             "album_protected_url": {
-                "name": "{album_name}: Защищённая ссылка"
+                "name": "Защищённая ссылка"
             },
             "album_protected_password": {
-                "name": "{album_name}: Пароль ссылки"
+                "name": "Пароль ссылки"
             }
         },
         "binary_sensor": {
             "album_new_assets": {
-                "name": "{album_name}: Новые файлы"
+                "name": "Новые файлы"
             }
         },
         "camera": {
             "album_thumbnail": {
-                "name": "{album_name}: Превью"
+                "name": "Превью"
             }
         },
         "text": {
             "album_protected_password_edit": {
-                "name": "{album_name}: Пароль ссылки"
+                "name": "Пароль ссылки"
             }
         },
         "button": {
             "create_share_link": {
-                "name": "{album_name}: Создать ссылку"
+                "name": "Создать ссылку"
             },
             "delete_share_link": {
-                "name": "{album_name}: Удалить ссылку"
+                "name": "Удалить ссылку"
             },
             "create_protected_link": {
-                "name": "{album_name}: Создать защищённую ссылку"
+                "name": "Создать защищённую ссылку"
             },
             "delete_protected_link": {
-                "name": "{album_name}: Удалить защищённую ссылку"
+                "name": "Удалить защищённую ссылку"
             }
         }
     },

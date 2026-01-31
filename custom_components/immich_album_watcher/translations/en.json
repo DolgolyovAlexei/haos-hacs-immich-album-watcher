@@ -2,60 +2,60 @@
     "entity": {
         "sensor": {
             "album_id": {
-                "name": "{album_name}: Album ID"
+                "name": "Album ID"
             },
             "album_asset_count": {
-                "name": "{album_name}: Asset Count"
+                "name": "Asset Count"
             },
             "album_photo_count": {
-                "name": "{album_name}: Photo Count"
+                "name": "Photo Count"
             },
             "album_video_count": {
-                "name": "{album_name}: Video Count"
+                "name": "Video Count"
             },
             "album_last_updated": {
-                "name": "{album_name}: Last Updated"
+                "name": "Last Updated"
             },
             "album_created": {
-                "name": "{album_name}: Created"
+                "name": "Created"
             },
             "album_public_url": {
-                "name": "{album_name}: Public URL"
+                "name": "Public URL"
             },
             "album_protected_url": {
-                "name": "{album_name}: Protected URL"
+                "name": "Protected URL"
             },
             "album_protected_password": {
-                "name": "{album_name}: Protected Password"
+                "name": "Protected Password"
             }
         },
         "binary_sensor": {
             "album_new_assets": {
-                "name": "{album_name}: New Assets"
+                "name": "New Assets"
             }
         },
         "camera": {
             "album_thumbnail": {
-                "name": "{album_name}: Thumbnail"
+                "name": "Thumbnail"
             }
         },
         "text": {
             "album_protected_password_edit": {
-                "name": "{album_name}: Share Password"
+                "name": "Share Password"
             }
         },
         "button": {
             "create_share_link": {
-                "name": "{album_name}: Create Share Link"
+                "name": "Create Share Link"
             },
             "delete_share_link": {
-                "name": "{album_name}: Delete Share Link"
+                "name": "Delete Share Link"
             },
             "create_protected_link": {
-                "name": "{album_name}: Create Protected Link"
+                "name": "Create Protected Link"
             },
             "delete_protected_link": {
-                "name": "{album_name}: Delete Protected Link"
+                "name": "Delete Protected Link"
             }
         }
     },

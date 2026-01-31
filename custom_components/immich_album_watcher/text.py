@@ -80,13 +80,6 @@ class ImmichAlbumProtectedPasswordText(
         return self.coordinator.data
 
     @property
-    def translation_placeholders(self) -> dict[str, str]:
-        """Return translation placeholders."""
-        if self._album_data:
-            return {"album_name": self._album_data.name}
-        return {"album_name": self._album_name}
-
-    @property
     def available(self) -> bool:
         """Return if entity is available.
 
