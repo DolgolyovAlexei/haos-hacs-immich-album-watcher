@@ -116,3 +116,14 @@ send_telegram_notification:
       default: true
       selector:
         boolean:
+    max_asset_data_size:
+      name: Max Asset Data Size
+      description: Maximum asset size in bytes. Assets exceeding this limit will be skipped. Leave empty for no limit.
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 52428800
+          step: 1048576
+          unit_of_measurement: "bytes"
+          mode: box

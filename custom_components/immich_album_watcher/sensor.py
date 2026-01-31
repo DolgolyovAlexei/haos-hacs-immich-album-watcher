@@ -188,6 +188,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         max_group_size: int = 10,
         chunk_delay: int = 0,
         wait_for_response: bool = True,
+        max_asset_data_size: int | None = None,
     ) -> ServiceResponse:
         """Send notification to Telegram.
 
@@ -216,6 +217,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                     parse_mode=parse_mode,
                     max_group_size=max_group_size,
                     chunk_delay=chunk_delay,
+                    max_asset_data_size=max_asset_data_size,
                 )
             )
             return {"success": True, "status": "queued", "message": "Notification queued for background processing"}
@@ -231,6 +233,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
             parse_mode=parse_mode,
             max_group_size=max_group_size,
             chunk_delay=chunk_delay,
+            max_asset_data_size=max_asset_data_size,
         )
 
     async def _execute_telegram_notification(
@@ -244,6 +247,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         parse_mode: str = "HTML",
         max_group_size: int = 10,
         chunk_delay: int = 0,
+        max_asset_data_size: int | None = None,
     ) -> ServiceResponse:
         """Execute the Telegram notification (internal method)."""
         import json
@@ -270,18 +274,18 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         # Handle single photo
         if len(urls) == 1 and urls[0].get("type", "photo") == "photo":
             return await self._send_telegram_photo(
-                session, token, chat_id, urls[0].get("url"), caption, reply_to_message_id, parse_mode
+                session, token, chat_id, urls[0].get("url"), caption, reply_to_message_id, parse_mode, max_asset_data_size
             )
 
         # Handle single video
         if len(urls) == 1 and urls[0].get("type") == "video":
             return await self._send_telegram_video(
-                session, token, chat_id, urls[0].get("url"), caption, reply_to_message_id, parse_mode
+                session, token, chat_id, urls[0].get("url"), caption, reply_to_message_id, parse_mode, max_asset_data_size
             )
 
         # Handle multiple items - send as media group(s)
         return await self._send_telegram_media_group(
-            session, token, chat_id, urls, caption, reply_to_message_id, max_group_size, chunk_delay, parse_mode
+            session, token, chat_id, urls, caption, reply_to_message_id, max_group_size, chunk_delay, parse_mode, max_asset_data_size
         )
 
     async def _send_telegram_message(
@@ -341,6 +345,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         caption: str | None = None,
         reply_to_message_id: int | None = None,
         parse_mode: str = "HTML",
+        max_asset_data_size: int | None = None,
     ) -> ServiceResponse:
         """Send a single photo to Telegram."""
         import aiohttp
@@ -360,6 +365,18 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                     }
                 data = await resp.read()
                 _LOGGER.debug("Downloaded photo: %d bytes", len(data))
+
+            # Check if photo exceeds max size limit
+            if max_asset_data_size is not None and len(data) > max_asset_data_size:
+                _LOGGER.warning(
+                    "Photo size (%d bytes) exceeds max_asset_data_size limit (%d bytes), skipping",
+                    len(data), max_asset_data_size
+                )
+                return {
+                    "success": False,
+                    "error": f"Photo size ({len(data)} bytes) exceeds max_asset_data_size limit ({max_asset_data_size} bytes)",
+                    "skipped": True,
+                }
 
             # Build multipart form
             form = FormData()
@@ -405,6 +422,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         caption: str | None = None,
         reply_to_message_id: int | None = None,
         parse_mode: str = "HTML",
+        max_asset_data_size: int | None = None,
     ) -> ServiceResponse:
         """Send a single video to Telegram."""
         import aiohttp
@@ -424,6 +442,18 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                     }
                 data = await resp.read()
                 _LOGGER.debug("Downloaded video: %d bytes", len(data))
+
+            # Check if video exceeds max size limit
+            if max_asset_data_size is not None and len(data) > max_asset_data_size:
+                _LOGGER.warning(
+                    "Video size (%d bytes) exceeds max_asset_data_size limit (%d bytes), skipping",
+                    len(data), max_asset_data_size
+                )
+                return {
+                    "success": False,
+                    "error": f"Video size ({len(data)} bytes) exceeds max_asset_data_size limit ({max_asset_data_size} bytes)",
+                    "skipped": True,
+                }
 
             # Build multipart form
             form = FormData()
@@ -471,6 +501,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         max_group_size: int = 10,
         chunk_delay: int = 0,
         parse_mode: str = "HTML",
+        max_asset_data_size: int | None = None,
     ) -> ServiceResponse:
         """Send media URLs to Telegram as media group(s).
 
@@ -511,12 +542,12 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                 if media_type == "photo":
                     _LOGGER.debug("Sending chunk %d/%d as single photo", chunk_idx + 1, len(chunks))
                     result = await self._send_telegram_photo(
-                        session, token, chat_id, url, chunk_caption, chunk_reply_to, parse_mode
+                        session, token, chat_id, url, chunk_caption, chunk_reply_to, parse_mode, max_asset_data_size
                     )
                 else:  # video
                     _LOGGER.debug("Sending chunk %d/%d as single video", chunk_idx + 1, len(chunks))
                     result = await self._send_telegram_video(
-                        session, token, chat_id, url, chunk_caption, chunk_reply_to, parse_mode
+                        session, token, chat_id, url, chunk_caption, chunk_reply_to, parse_mode, max_asset_data_size
                     )
 
                 if not result.get("success"):
@@ -530,6 +561,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
 
             # Download all media files for this chunk
             media_files: list[tuple[str, bytes, str]] = []
+            skipped_count = 0
             for i, item in enumerate(chunk):
                 url = item.get("url")
                 media_type = item.get("type", "photo")
@@ -555,15 +587,31 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                                 "error": f"Failed to download media {chunk_idx * max_group_size + i}: HTTP {resp.status}",
                             }
                         data = await resp.read()
+                        _LOGGER.debug("Downloaded media %d: %d bytes", chunk_idx * max_group_size + i, len(data))
+
+                        # Check if media exceeds max size limit
+                        if max_asset_data_size is not None and len(data) > max_asset_data_size:
+                            _LOGGER.warning(
+                                "Media %d size (%d bytes) exceeds max_asset_data_size limit (%d bytes), skipping",
+                                chunk_idx * max_group_size + i, len(data), max_asset_data_size
+                            )
+                            skipped_count += 1
+                            continue
+
                         ext = "jpg" if media_type == "photo" else "mp4"
                         filename = f"media_{chunk_idx * max_group_size + i}.{ext}"
                         media_files.append((media_type, data, filename))
-                        _LOGGER.debug("Downloaded media %d: %d bytes", chunk_idx * max_group_size + i, len(data))
                 except aiohttp.ClientError as err:
                     return {
                         "success": False,
                         "error": f"Failed to download media {chunk_idx * max_group_size + i}: {err}",
                     }
+
+            # Skip this chunk if all files were filtered out
+            if not media_files:
+                _LOGGER.info("Chunk %d/%d: all %d media items skipped due to size limit",
+                            chunk_idx + 1, len(chunks), len(chunk))
+                continue
 
             # Build multipart form
             form = FormData()

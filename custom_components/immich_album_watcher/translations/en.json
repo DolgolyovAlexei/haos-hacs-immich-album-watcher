@@ -186,6 +186,10 @@
                 "wait_for_response": {
                     "name": "Wait For Response",
                     "description": "Wait for Telegram to finish processing before returning. Set to false for fire-and-forget (automation continues immediately)."
+                },
+                "max_asset_data_size": {
+                    "name": "Max Asset Data Size",
+                    "description": "Maximum asset size in bytes. Assets exceeding this limit will be skipped. Leave empty for no limit."
                 }
             }
         }
