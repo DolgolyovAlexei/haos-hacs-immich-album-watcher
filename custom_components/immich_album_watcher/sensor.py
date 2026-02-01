@@ -499,6 +499,41 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         if not url:
             return {"success": False, "error": "Missing 'url' for photo"}
 
+        # Check cache for file_id
+        cache = self.coordinator.telegram_cache
+        cached = cache.get(url) if cache else None
+
+        if cached and cached.get("file_id"):
+            # Use cached file_id - no download needed
+            file_id = cached["file_id"]
+            _LOGGER.debug("Using cached Telegram file_id for photo")
+
+            payload = {
+                "chat_id": chat_id,
+                "photo": file_id,
+                "parse_mode": parse_mode,
+            }
+            if caption:
+                payload["caption"] = caption
+            if reply_to_message_id:
+                payload["reply_to_message_id"] = reply_to_message_id
+
+            telegram_url = f"https://api.telegram.org/bot{token}/sendPhoto"
+            try:
+                async with session.post(telegram_url, json=payload) as response:
+                    result = await response.json()
+                    if response.status == 200 and result.get("ok"):
+                        return {
+                            "success": True,
+                            "message_id": result.get("result", {}).get("message_id"),
+                            "cached": True,
+                        }
+                    else:
+                        # Cache might be stale, fall through to upload
+                        _LOGGER.debug("Cached file_id failed, will re-upload: %s", result.get("description"))
+            except aiohttp.ClientError as err:
+                _LOGGER.debug("Cached file_id request failed: %s", err)
+
         try:
             # Download the photo
             _LOGGER.debug("Downloading photo from %s", url[:80])
@@ -531,7 +566,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                     _LOGGER.info("Photo %s, sending as document", reason)
                     return await self._send_telegram_document(
                         session, token, chat_id, data, "photo.jpg",
-                        caption, reply_to_message_id, parse_mode
+                        caption, reply_to_message_id, parse_mode, url
                     )
                 else:
                     # Skip oversized photo
@@ -562,6 +597,14 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                 result = await response.json()
                 _LOGGER.debug("Telegram API response: status=%d, ok=%s", response.status, result.get("ok"))
                 if response.status == 200 and result.get("ok"):
+                    # Extract and cache file_id
+                    photos = result.get("result", {}).get("photo", [])
+                    if photos and cache:
+                        # Use the largest photo's file_id
+                        file_id = photos[-1].get("file_id")
+                        if file_id:
+                            await cache.async_set(url, file_id, "photo")
+
                     return {
                         "success": True,
                         "message_id": result.get("result", {}).get("message_id"),
@@ -600,6 +643,41 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
 
         if not url:
             return {"success": False, "error": "Missing 'url' for video"}
+
+        # Check cache for file_id
+        cache = self.coordinator.telegram_cache
+        cached = cache.get(url) if cache else None
+
+        if cached and cached.get("file_id"):
+            # Use cached file_id - no download needed
+            file_id = cached["file_id"]
+            _LOGGER.debug("Using cached Telegram file_id for video")
+
+            payload = {
+                "chat_id": chat_id,
+                "video": file_id,
+                "parse_mode": parse_mode,
+            }
+            if caption:
+                payload["caption"] = caption
+            if reply_to_message_id:
+                payload["reply_to_message_id"] = reply_to_message_id
+
+            telegram_url = f"https://api.telegram.org/bot{token}/sendVideo"
+            try:
+                async with session.post(telegram_url, json=payload) as response:
+                    result = await response.json()
+                    if response.status == 200 and result.get("ok"):
+                        return {
+                            "success": True,
+                            "message_id": result.get("result", {}).get("message_id"),
+                            "cached": True,
+                        }
+                    else:
+                        # Cache might be stale, fall through to upload
+                        _LOGGER.debug("Cached file_id failed, will re-upload: %s", result.get("description"))
+            except aiohttp.ClientError as err:
+                _LOGGER.debug("Cached file_id request failed: %s", err)
 
         try:
             # Download the video
@@ -645,6 +723,13 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                 result = await response.json()
                 _LOGGER.debug("Telegram API response: status=%d, ok=%s", response.status, result.get("ok"))
                 if response.status == 200 and result.get("ok"):
+                    # Extract and cache file_id
+                    video = result.get("result", {}).get("video", {})
+                    if video and cache:
+                        file_id = video.get("file_id")
+                        if file_id:
+                            await cache.async_set(url, file_id, "video")
+
                     return {
                         "success": True,
                         "message_id": result.get("result", {}).get("message_id"),
@@ -676,10 +761,45 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
         caption: str | None = None,
         reply_to_message_id: int | None = None,
         parse_mode: str = "HTML",
+        source_url: str | None = None,
     ) -> ServiceResponse:
         """Send a photo as a document to Telegram (for oversized photos)."""
         import aiohttp
         from aiohttp import FormData
+
+        # Check cache for file_id if source_url is provided
+        cache = self.coordinator.telegram_cache
+        if source_url:
+            cached = cache.get(source_url) if cache else None
+            if cached and cached.get("file_id") and cached.get("type") == "document":
+                # Use cached file_id
+                file_id = cached["file_id"]
+                _LOGGER.debug("Using cached Telegram file_id for document")
+
+                payload = {
+                    "chat_id": chat_id,
+                    "document": file_id,
+                    "parse_mode": parse_mode,
+                }
+                if caption:
+                    payload["caption"] = caption
+                if reply_to_message_id:
+                    payload["reply_to_message_id"] = reply_to_message_id
+
+                telegram_url = f"https://api.telegram.org/bot{token}/sendDocument"
+                try:
+                    async with session.post(telegram_url, json=payload) as response:
+                        result = await response.json()
+                        if response.status == 200 and result.get("ok"):
+                            return {
+                                "success": True,
+                                "message_id": result.get("result", {}).get("message_id"),
+                                "cached": True,
+                            }
+                        else:
+                            _LOGGER.debug("Cached file_id failed, will re-upload: %s", result.get("description"))
+                except aiohttp.ClientError as err:
+                    _LOGGER.debug("Cached file_id request failed: %s", err)
 
         try:
             # Build multipart form
@@ -702,6 +822,13 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                 result = await response.json()
                 _LOGGER.debug("Telegram API response: status=%d, ok=%s", response.status, result.get("ok"))
                 if response.status == 200 and result.get("ok"):
+                    # Extract and cache file_id
+                    if source_url and cache:
+                        document = result.get("result", {}).get("document", {})
+                        file_id = document.get("file_id")
+                        if file_id:
+                            await cache.async_set(source_url, file_id, "document")
+
                     return {
                         "success": True,
                         "message_id": result.get("result", {}).get("message_id"),
@@ -794,9 +921,14 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
             # Multi-item chunk: use sendMediaGroup
             _LOGGER.debug("Sending chunk %d/%d as media group (%d items)", chunk_idx + 1, len(chunks), len(chunk))
 
-            # Download all media files for this chunk
-            media_files: list[tuple[str, bytes, str]] = []  # (type, data, filename)
-            oversized_photos: list[tuple[bytes, str | None]] = []  # For send_large_photos_as_documents=true
+            # Get cache reference
+            cache = self.coordinator.telegram_cache
+
+            # Collect media items - either from cache (file_id) or by downloading
+            # Each item: (type, media_ref, filename, url, is_cached)
+            # media_ref is either file_id (str) or data (bytes)
+            media_items: list[tuple[str, str | bytes, str, str, bool]] = []
+            oversized_photos: list[tuple[bytes, str | None, str]] = []  # (data, caption, url)
             skipped_count = 0
 
             for i, item in enumerate(chunk):
@@ -814,6 +946,16 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                         "success": False,
                         "error": f"Invalid type '{media_type}' in item {chunk_idx * max_group_size + i}. Must be 'photo' or 'video'.",
                     }
+
+                # Check cache first
+                cached = cache.get(url) if cache else None
+                if cached and cached.get("file_id"):
+                    # Use cached file_id
+                    ext = "jpg" if media_type == "photo" else "mp4"
+                    filename = f"media_{chunk_idx * max_group_size + i}.{ext}"
+                    media_items.append((media_type, cached["file_id"], filename, url, True))
+                    _LOGGER.debug("Using cached file_id for media %d", chunk_idx * max_group_size + i)
+                    continue
 
                 try:
                     _LOGGER.debug("Downloading media %d from %s", chunk_idx * max_group_size + i, url[:80])
@@ -842,8 +984,8 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                                 if send_large_photos_as_documents:
                                     # Separate this photo to send as document later
                                     # Caption only on first item of first chunk
-                                    photo_caption = caption if chunk_idx == 0 and i == 0 and len(media_files) == 0 else None
-                                    oversized_photos.append((data, photo_caption))
+                                    photo_caption = caption if chunk_idx == 0 and i == 0 and len(media_items) == 0 else None
+                                    oversized_photos.append((data, photo_caption, url))
                                     _LOGGER.info("Photo %d %s, will send as document", i, reason)
                                     continue
                                 else:
@@ -854,7 +996,7 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
 
                         ext = "jpg" if media_type == "photo" else "mp4"
                         filename = f"media_{chunk_idx * max_group_size + i}.{ext}"
-                        media_files.append((media_type, data, filename))
+                        media_items.append((media_type, data, filename, url, False))
                 except aiohttp.ClientError as err:
                     return {
                         "success": False,
@@ -862,95 +1004,165 @@ class ImmichAlbumBaseSensor(CoordinatorEntity[ImmichAlbumWatcherCoordinator], Se
                     }
 
             # Skip this chunk if all files were filtered out
-            if not media_files and not oversized_photos:
+            if not media_items and not oversized_photos:
                 _LOGGER.info("Chunk %d/%d: all %d media items skipped",
                             chunk_idx + 1, len(chunks), len(chunk))
                 continue
 
             # Send media group if we have normal-sized files
-            if media_files:
-                # Build multipart form
-                form = FormData()
-                form.add_field("chat_id", chat_id)
+            if media_items:
+                # Check if all items are cached (can use simple JSON payload)
+                all_cached = all(is_cached for _, _, _, _, is_cached in media_items)
 
-                # Only use reply_to_message_id for the first chunk
-                if chunk_idx == 0 and reply_to_message_id:
-                    form.add_field("reply_to_message_id", str(reply_to_message_id))
+                if all_cached:
+                    # All items cached - use simple JSON payload with file_ids
+                    _LOGGER.debug("All %d items cached, using file_ids", len(media_items))
+                    media_json = []
+                    for i, (media_type, file_id, _, _, _) in enumerate(media_items):
+                        media_item_json: dict[str, Any] = {
+                            "type": media_type,
+                            "media": file_id,
+                        }
+                        if chunk_idx == 0 and i == 0 and caption and not oversized_photos:
+                            media_item_json["caption"] = caption
+                            media_item_json["parse_mode"] = parse_mode
+                        media_json.append(media_item_json)
 
-                # Build media JSON with attach:// references
-                media_json = []
-                for i, (media_type, data, filename) in enumerate(media_files):
-                    attach_name = f"file{i}"
-                    media_item: dict[str, Any] = {
-                        "type": media_type,
-                        "media": f"attach://{attach_name}",
+                    payload = {
+                        "chat_id": chat_id,
+                        "media": media_json,
                     }
-                    # Only add caption to the first item of the first chunk (if no oversized photos with caption)
-                    if chunk_idx == 0 and i == 0 and caption and not oversized_photos:
-                        media_item["caption"] = caption
-                        media_item["parse_mode"] = parse_mode
-                    media_json.append(media_item)
+                    if chunk_idx == 0 and reply_to_message_id:
+                        payload["reply_to_message_id"] = reply_to_message_id
 
-                    content_type = "image/jpeg" if media_type == "photo" else "video/mp4"
-                    form.add_field(attach_name, data, filename=filename, content_type=content_type)
+                    telegram_url = f"https://api.telegram.org/bot{token}/sendMediaGroup"
+                    try:
+                        async with session.post(telegram_url, json=payload) as response:
+                            result = await response.json()
+                            if response.status == 200 and result.get("ok"):
+                                chunk_message_ids = [
+                                    msg.get("message_id") for msg in result.get("result", [])
+                                ]
+                                all_message_ids.extend(chunk_message_ids)
+                            else:
+                                # Cache might be stale - fall through to upload path
+                                _LOGGER.debug("Cached file_ids failed, will re-upload: %s", result.get("description"))
+                                all_cached = False  # Force re-upload
+                    except aiohttp.ClientError as err:
+                        _LOGGER.debug("Cached file_ids request failed: %s", err)
+                        all_cached = False
 
-                form.add_field("media", json.dumps(media_json))
+                if not all_cached:
+                    # Build multipart form with mix of cached file_ids and uploaded data
+                    form = FormData()
+                    form.add_field("chat_id", chat_id)
 
-                # Send to Telegram
-                telegram_url = f"https://api.telegram.org/bot{token}/sendMediaGroup"
+                    # Only use reply_to_message_id for the first chunk
+                    if chunk_idx == 0 and reply_to_message_id:
+                        form.add_field("reply_to_message_id", str(reply_to_message_id))
 
-                try:
-                    _LOGGER.debug("Uploading media group chunk %d/%d (%d files) to Telegram",
-                                 chunk_idx + 1, len(chunks), len(media_files))
-                    async with session.post(telegram_url, data=form) as response:
-                        result = await response.json()
-                        _LOGGER.debug("Telegram API response: status=%d, ok=%s", response.status, result.get("ok"))
-                        if response.status == 200 and result.get("ok"):
-                            chunk_message_ids = [
-                                msg.get("message_id") for msg in result.get("result", [])
-                            ]
-                            all_message_ids.extend(chunk_message_ids)
-                        else:
-                            # Log detailed error for media group with total size info
-                            total_size = sum(len(d) for _, d, _ in media_files)
-                            _LOGGER.error(
-                                "Telegram API error for chunk %d/%d: %s | Media count: %d | Total size: %d bytes (%.2f MB)",
-                                chunk_idx + 1, len(chunks),
-                                result.get("description", "Unknown Telegram error"),
-                                len(media_files),
-                                total_size,
-                                total_size / (1024 * 1024)
-                            )
-                            # Log detailed diagnostics for the first photo in the group
-                            for media_type, data, _ in media_files:
-                                if media_type == "photo":
-                                    self._log_telegram_error(
-                                        error_code=result.get("error_code"),
-                                        description=result.get("description", "Unknown Telegram error"),
-                                        data=data,
-                                        media_type="photo",
-                                    )
-                                    break  # Only log details for first photo
-                            return {
-                                "success": False,
-                                "error": result.get("description", "Unknown Telegram error"),
-                                "error_code": result.get("error_code"),
-                                "failed_at_chunk": chunk_idx + 1,
+                    # Build media JSON - use file_id for cached, attach:// for uploaded
+                    media_json = []
+                    upload_idx = 0
+                    urls_to_cache: list[tuple[str, int, str]] = []  # (url, result_idx, type)
+
+                    for i, (media_type, media_ref, filename, url, is_cached) in enumerate(media_items):
+                        if is_cached:
+                            # Use file_id directly
+                            media_item_json: dict[str, Any] = {
+                                "type": media_type,
+                                "media": media_ref,  # file_id
                             }
-                except aiohttp.ClientError as err:
-                    _LOGGER.error("Telegram upload failed for chunk %d: %s", chunk_idx + 1, err)
-                    return {
-                        "success": False,
-                        "error": str(err),
-                        "failed_at_chunk": chunk_idx + 1,
-                    }
+                        else:
+                            # Upload this file
+                            attach_name = f"file{upload_idx}"
+                            media_item_json = {
+                                "type": media_type,
+                                "media": f"attach://{attach_name}",
+                            }
+                            content_type = "image/jpeg" if media_type == "photo" else "video/mp4"
+                            form.add_field(attach_name, media_ref, filename=filename, content_type=content_type)
+                            urls_to_cache.append((url, i, media_type))
+                            upload_idx += 1
+
+                        if chunk_idx == 0 and i == 0 and caption and not oversized_photos:
+                            media_item_json["caption"] = caption
+                            media_item_json["parse_mode"] = parse_mode
+                        media_json.append(media_item_json)
+
+                    form.add_field("media", json.dumps(media_json))
+
+                    # Send to Telegram
+                    telegram_url = f"https://api.telegram.org/bot{token}/sendMediaGroup"
+
+                    try:
+                        _LOGGER.debug("Uploading media group chunk %d/%d (%d files, %d cached) to Telegram",
+                                     chunk_idx + 1, len(chunks), len(media_items), len(media_items) - upload_idx)
+                        async with session.post(telegram_url, data=form) as response:
+                            result = await response.json()
+                            _LOGGER.debug("Telegram API response: status=%d, ok=%s", response.status, result.get("ok"))
+                            if response.status == 200 and result.get("ok"):
+                                chunk_message_ids = [
+                                    msg.get("message_id") for msg in result.get("result", [])
+                                ]
+                                all_message_ids.extend(chunk_message_ids)
+
+                                # Cache the newly uploaded file_ids
+                                if cache and urls_to_cache:
+                                    result_messages = result.get("result", [])
+                                    for url, result_idx, m_type in urls_to_cache:
+                                        if result_idx < len(result_messages):
+                                            msg = result_messages[result_idx]
+                                            if m_type == "photo":
+                                                photos = msg.get("photo", [])
+                                                if photos:
+                                                    await cache.async_set(url, photos[-1].get("file_id"), "photo")
+                                            elif m_type == "video":
+                                                video = msg.get("video", {})
+                                                if video.get("file_id"):
+                                                    await cache.async_set(url, video["file_id"], "video")
+                            else:
+                                # Log detailed error for media group with total size info
+                                uploaded_data = [m for m in media_items if not m[4]]
+                                total_size = sum(len(d) for _, d, _, _, _ in uploaded_data if isinstance(d, bytes))
+                                _LOGGER.error(
+                                    "Telegram API error for chunk %d/%d: %s | Media count: %d | Uploaded size: %d bytes (%.2f MB)",
+                                    chunk_idx + 1, len(chunks),
+                                    result.get("description", "Unknown Telegram error"),
+                                    len(media_items),
+                                    total_size,
+                                    total_size / (1024 * 1024) if total_size else 0
+                                )
+                                # Log detailed diagnostics for the first photo in the group
+                                for media_type, media_ref, _, _, is_cached in media_items:
+                                    if media_type == "photo" and not is_cached and isinstance(media_ref, bytes):
+                                        self._log_telegram_error(
+                                            error_code=result.get("error_code"),
+                                            description=result.get("description", "Unknown Telegram error"),
+                                            data=media_ref,
+                                            media_type="photo",
+                                        )
+                                        break  # Only log details for first photo
+                                return {
+                                    "success": False,
+                                    "error": result.get("description", "Unknown Telegram error"),
+                                    "error_code": result.get("error_code"),
+                                    "failed_at_chunk": chunk_idx + 1,
+                                }
+                    except aiohttp.ClientError as err:
+                        _LOGGER.error("Telegram upload failed for chunk %d: %s", chunk_idx + 1, err)
+                        return {
+                            "success": False,
+                            "error": str(err),
+                            "failed_at_chunk": chunk_idx + 1,
+                        }
 
             # Send oversized photos as documents
-            for i, (data, photo_caption) in enumerate(oversized_photos):
+            for i, (data, photo_caption, photo_url) in enumerate(oversized_photos):
                 _LOGGER.debug("Sending oversized photo %d/%d as document", i + 1, len(oversized_photos))
                 result = await self._send_telegram_document(
                     session, token, chat_id, data, f"photo_{i}.jpg",
-                    photo_caption, None, parse_mode
+                    photo_caption, None, parse_mode, photo_url
                 )
                 if result.get("success"):
                     all_message_ids.append(result.get("message_id"))

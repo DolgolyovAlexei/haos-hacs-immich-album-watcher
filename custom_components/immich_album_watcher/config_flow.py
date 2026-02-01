@@ -27,7 +27,9 @@ from .const import (
     CONF_IMMICH_URL,
     CONF_SCAN_INTERVAL,
     CONF_TELEGRAM_BOT_TOKEN,
+    CONF_TELEGRAM_CACHE_TTL,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_TELEGRAM_CACHE_TTL,
     DOMAIN,
     SUBENTRY_TYPE_ALBUM,
 )
@@ -252,6 +254,9 @@ class ImmichAlbumWatcherOptionsFlow(OptionsFlow):
                     CONF_TELEGRAM_BOT_TOKEN: user_input.get(
                         CONF_TELEGRAM_BOT_TOKEN, ""
                     ),
+                    CONF_TELEGRAM_CACHE_TTL: user_input.get(
+                        CONF_TELEGRAM_CACHE_TTL, DEFAULT_TELEGRAM_CACHE_TTL
+                    ),
                 },
             )
 
@@ -260,6 +265,9 @@ class ImmichAlbumWatcherOptionsFlow(OptionsFlow):
         )
         current_bot_token = self._config_entry.options.get(
             CONF_TELEGRAM_BOT_TOKEN, ""
+        )
+        current_cache_ttl = self._config_entry.options.get(
+            CONF_TELEGRAM_CACHE_TTL, DEFAULT_TELEGRAM_CACHE_TTL
         )
 
         return self.async_show_form(
@@ -272,6 +280,9 @@ class ImmichAlbumWatcherOptionsFlow(OptionsFlow):
                     vol.Optional(
                         CONF_TELEGRAM_BOT_TOKEN, default=current_bot_token
                     ): str,
+                    vol.Optional(
+                        CONF_TELEGRAM_CACHE_TTL, default=current_cache_ttl
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=168)),
                 }
             ),
         )

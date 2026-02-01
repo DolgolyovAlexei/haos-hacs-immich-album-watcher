@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .storage import ImmichAlbumStorage
+    from .storage import ImmichAlbumStorage, TelegramFileCache
 
 import aiohttp
 
@@ -31,6 +31,9 @@ from .const import (
     ATTR_ASSET_IS_FAVORITE,
     ATTR_ASSET_LATITUDE,
     ATTR_ASSET_LONGITUDE,
+    ATTR_ASSET_CITY,
+    ATTR_ASSET_STATE,
+    ATTR_ASSET_COUNTRY,
     ATTR_ASSET_OWNER,
     ATTR_ASSET_OWNER_ID,
     ATTR_ASSET_PLAYBACK_URL,
@@ -124,6 +127,9 @@ class AssetInfo:
     rating: int | None = None
     latitude: float | None = None
     longitude: float | None = None
+    city: str | None = None
+    state: str | None = None
+    country: str | None = None
     is_processed: bool = True  # Whether asset is fully processed by Immich
 
     @classmethod
@@ -155,6 +161,11 @@ class AssetInfo:
         latitude = exif_info.get("latitude") if exif_info else None
         longitude = exif_info.get("longitude") if exif_info else None
 
+        # Get reverse geocoded location
+        city = exif_info.get("city") if exif_info else None
+        state = exif_info.get("state") if exif_info else None
+        country = exif_info.get("country") if exif_info else None
+
         # Check if asset is fully processed by Immich
         asset_type = data.get("type", ASSET_TYPE_IMAGE)
         is_processed = cls._check_processing_status(data, asset_type)
@@ -172,6 +183,9 @@ class AssetInfo:
             rating=rating,
             latitude=latitude,
             longitude=longitude,
+            city=city,
+            state=state,
+            country=country,
             is_processed=is_processed,
         )
 
@@ -304,6 +318,7 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
         scan_interval: int,
         hub_name: str = "Immich",
         storage: ImmichAlbumStorage | None = None,
+        telegram_cache: TelegramFileCache | None = None,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -323,6 +338,7 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
         self._users_cache: dict[str, str] = {}  # user_id -> name
         self._shared_links: list[SharedLinkInfo] = []
         self._storage = storage
+        self._telegram_cache = telegram_cache
         self._persisted_asset_ids: set[str] | None = None
 
     @property
@@ -344,6 +360,11 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
     def album_name(self) -> str:
         """Return the album name."""
         return self._album_name
+
+    @property
+    def telegram_cache(self) -> TelegramFileCache | None:
+        """Return the Telegram file cache."""
+        return self._telegram_cache
 
     def update_scan_interval(self, scan_interval: int) -> None:
         """Update the scan interval."""
@@ -660,6 +681,9 @@ class ImmichAlbumWatcherCoordinator(DataUpdateCoordinator[AlbumData | None]):
             ATTR_ASSET_RATING: asset.rating,
             ATTR_ASSET_LATITUDE: asset.latitude,
             ATTR_ASSET_LONGITUDE: asset.longitude,
+            ATTR_ASSET_CITY: asset.city,
+            ATTR_ASSET_STATE: asset.state,
+            ATTR_ASSET_COUNTRY: asset.country,
         }
 
         # Add thumbnail URL if requested

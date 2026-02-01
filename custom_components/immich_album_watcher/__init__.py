@@ -15,12 +15,14 @@ from .const import (
     CONF_HUB_NAME,
     CONF_IMMICH_URL,
     CONF_SCAN_INTERVAL,
+    CONF_TELEGRAM_CACHE_TTL,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_TELEGRAM_CACHE_TTL,
     DOMAIN,
     PLATFORMS,
 )
 from .coordinator import ImmichAlbumWatcherCoordinator
-from .storage import ImmichAlbumStorage
+from .storage import ImmichAlbumStorage, TelegramFileCache
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,6 +35,7 @@ class ImmichHubData:
     url: str
     api_key: str
     scan_interval: int
+    telegram_cache_ttl: int
 
 
 @dataclass
@@ -55,6 +58,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ImmichConfigEntry) -> bo
     url = entry.data[CONF_IMMICH_URL]
     api_key = entry.data[CONF_API_KEY]
     scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+    telegram_cache_ttl = entry.options.get(CONF_TELEGRAM_CACHE_TTL, DEFAULT_TELEGRAM_CACHE_TTL)
 
     # Store hub data
     entry.runtime_data = ImmichHubData(
@@ -62,6 +66,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ImmichConfigEntry) -> bo
         url=url,
         api_key=api_key,
         scan_interval=scan_interval,
+        telegram_cache_ttl=telegram_cache_ttl,
     )
 
     # Create storage for persisting album state across restarts
@@ -107,6 +112,12 @@ async def _async_setup_subentry_coordinator(
 
     _LOGGER.debug("Setting up coordinator for album: %s (%s)", album_name, album_id)
 
+    # Create and load Telegram file cache for this album
+    # TTL is in hours from config, convert to seconds
+    cache_ttl_seconds = hub_data.telegram_cache_ttl * 60 * 60
+    telegram_cache = TelegramFileCache(hass, album_id, ttl_seconds=cache_ttl_seconds)
+    await telegram_cache.async_load()
+
     # Create coordinator for this album
     coordinator = ImmichAlbumWatcherCoordinator(
         hass,
@@ -117,6 +128,7 @@ async def _async_setup_subentry_coordinator(
         scan_interval=hub_data.scan_interval,
         hub_name=hub_data.name,
         storage=storage,
+        telegram_cache=telegram_cache,
     )
 
     # Load persisted state before first refresh to detect changes during downtime

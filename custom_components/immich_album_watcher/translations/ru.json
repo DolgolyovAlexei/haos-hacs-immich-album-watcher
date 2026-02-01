@@ -116,14 +116,16 @@
         "step": {
             "init": {
                 "title": "Настройки Immich Album Watcher",
-                "description": "Настройте интервал опроса для всех альбомов.",
+                "description": "Настройте интервал опроса и параметры Telegram для всех альбомов.",
                 "data": {
                     "scan_interval": "Интервал сканирования (секунды)",
-                    "telegram_bot_token": "Токен Telegram бота"
+                    "telegram_bot_token": "Токен Telegram бота",
+                    "telegram_cache_ttl": "Время жизни кэша Telegram (часы)"
                 },
                 "data_description": {
                     "scan_interval": "Как часто проверять изменения в альбомах (10-3600 секунд)",
-                    "telegram_bot_token": "Токен бота для отправки уведомлений в Telegram"
+                    "telegram_bot_token": "Токен бота для отправки уведомлений в Telegram",
+                    "telegram_cache_ttl": "Сколько хранить ID загруженных файлов для повторной отправки без загрузки (1-168 часов, по умолчанию: 48)"
                 }
             }
         }

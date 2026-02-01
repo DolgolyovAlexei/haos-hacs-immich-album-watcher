@@ -116,14 +116,16 @@
         "step": {
             "init": {
                 "title": "Immich Album Watcher Options",
-                "description": "Configure the polling interval for all albums.",
+                "description": "Configure the polling interval and Telegram settings for all albums.",
                 "data": {
                     "scan_interval": "Scan interval (seconds)",
-                    "telegram_bot_token": "Telegram Bot Token"
+                    "telegram_bot_token": "Telegram Bot Token",
+                    "telegram_cache_ttl": "Telegram Cache TTL (hours)"
                 },
                 "data_description": {
                     "scan_interval": "How often to check for album changes (10-3600 seconds)",
-                    "telegram_bot_token": "Bot token for sending notifications to Telegram"
+                    "telegram_bot_token": "Bot token for sending notifications to Telegram",
+                    "telegram_cache_ttl": "How long to cache uploaded file IDs to avoid re-uploading (1-168 hours, default: 48)"
                 }
             }
         }

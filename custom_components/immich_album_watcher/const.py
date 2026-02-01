@@ -14,12 +14,14 @@ CONF_ALBUM_ID: Final = "album_id"
 CONF_ALBUM_NAME: Final = "album_name"
 CONF_SCAN_INTERVAL: Final = "scan_interval"
 CONF_TELEGRAM_BOT_TOKEN: Final = "telegram_bot_token"
+CONF_TELEGRAM_CACHE_TTL: Final = "telegram_cache_ttl"
 
 # Subentry type
 SUBENTRY_TYPE_ALBUM: Final = "album"
 
 # Defaults
 DEFAULT_SCAN_INTERVAL: Final = 60  # seconds
+DEFAULT_TELEGRAM_CACHE_TTL: Final = 48  # hours
 NEW_ASSETS_RESET_DELAY: Final = 300  # 5 minutes
 DEFAULT_SHARE_PASSWORD: Final = "immich123"
 
@@ -70,6 +72,9 @@ ATTR_ASSET_IS_FAVORITE: Final = "is_favorite"
 ATTR_ASSET_RATING: Final = "rating"
 ATTR_ASSET_LATITUDE: Final = "latitude"
 ATTR_ASSET_LONGITUDE: Final = "longitude"
+ATTR_ASSET_CITY: Final = "city"
+ATTR_ASSET_STATE: Final = "state"
+ATTR_ASSET_COUNTRY: Final = "country"
 
 # Asset types
 ASSET_TYPE_IMAGE: Final = "IMAGE"

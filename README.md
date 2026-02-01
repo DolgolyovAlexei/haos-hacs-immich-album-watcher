@@ -77,6 +77,7 @@ A Home Assistant custom integration that monitors [Immich](https://immich.app/) 
 | Albums | Albums to monitor | Required |
 | Scan Interval | How often to check for changes (seconds) | 60 |
 | Telegram Bot Token | Bot token for sending media to Telegram (optional) | - |
+| Telegram Cache TTL | How long to cache uploaded file IDs (hours, 1-168) | 48 |
 
 ## Entities Created (per album)
 
@@ -240,6 +241,8 @@ Send notifications to Telegram. Supports multiple formats:
 - **Media group** - When `urls` contains multiple items
 
 The service downloads media from Immich and uploads it to Telegram, bypassing any CORS restrictions. Large lists of media are automatically split into multiple media groups based on the `max_group_size` parameter (default: 10 items per group).
+
+**File ID Caching:** When media is uploaded to Telegram, the service caches the returned `file_id`. Subsequent sends of the same media will use the cached `file_id` instead of re-uploading, significantly improving performance. The cache TTL is configurable in hub options (default: 48 hours, range: 1-168 hours). The cache is persistent across Home Assistant restarts and is stored per album.
 
 **Examples:**
 
@@ -420,6 +423,9 @@ Each item in the `added_assets` list contains the following fields:
 | `rating` | User rating of the asset (1-5 stars, or `null` if not rated) |
 | `latitude` | GPS latitude coordinate (or `null` if no geolocation) |
 | `longitude` | GPS longitude coordinate (or `null` if no geolocation) |
+| `city` | City name from reverse geocoding (or `null` if unavailable) |
+| `state` | State/region name from reverse geocoding (or `null` if unavailable) |
+| `country` | Country name from reverse geocoding (or `null` if unavailable) |
 | `url` | Public URL to view the asset (only present if album has a shared link) |
 | `download_url` | Direct download URL for the original file (if shared link exists) |
 | `playback_url` | Video playback URL (for VIDEO assets only, if shared link exists) |

@@ -3,6 +3,7 @@
 ## Version Management
 
 Update the integration version in `custom_components/immich_album_watcher/manifest.json` only when changes are made to the **integration content** (files inside `custom_components/immich_album_watcher/`).
+**IMPORTANT** ALWAYS ask for version bump before doing it.
 
 Do NOT bump version for:
 
